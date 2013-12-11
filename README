@@ -1,0 +1,34 @@
+# Simple script for verifying Cockpit pull requests.
+
+Hubbot is simplistic and not polished at all, but it might be useful
+nevertheless.
+
+The main point is to work with a fresh clone of the repo so that the
+main hacking repo isn't blocked while the test suite runs.
+
+## Installing
+
+"make install" will copy hubbot to /usr/local/bin.
+
+## Setup
+
+Put something like this into $HOME/.hubbotrc:
+
+    { 'master_repo': "git@github.com:cockpit-project/cockpit.git",
+      'github_token': "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    }
+
+The github_token is used to access the GitHub API.
+
+Hubbot sets TEST_DATA to $HOME/cockpit-data, so put your base tarballs
+and images there.
+
+Create the $HOME/hubbot directory.
+
+## Running
+
+To verify pull request number NNN, run
+
+    $ hubbot NNN
+
+If successful, this will add a comment to the pull request.

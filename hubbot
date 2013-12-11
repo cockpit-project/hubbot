@@ -1,0 +1,129 @@
+#! /usr/bin/python
+
+import subprocess
+import json
+import os
+import sys
+import errno
+import shutil
+import traceback
+import glob
+import ast
+
+keep_work_dirs = 10
+work = "%s/hubbot/" % os.environ['HOME']
+
+config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
+
+master_repo = config['master_repo']
+github_token = config['github_token']
+
+def mk_exclusive_dir(path):
+    try:
+        os.mkdir(path)
+        return True
+    except OSError as e:
+        if e.errno == errno.EEXIST:
+            return False
+        else:
+            raise e
+
+class WorkDir(object):
+    def __init__(self):
+        i = 0
+        while not mk_exclusive_dir (os.path.join (work, str(i))):
+            i = i + 1
+        self.path = os.path.join (work, str(i))
+
+    def __enter__(self):
+        print "Entering %s" % self.path
+        self.oldcwd = os.getcwd()
+        os.chdir(self.path)
+        self.log = open("hubbot.log", 'w', 1)
+        self.tail = subprocess.Popen([ "tail", "-f", "hubbot.log" ])
+        self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
+        self.old_stdout.flush(); self.old_stderr.flush()
+        sys.stdout = self.log
+        sys.stderr = self.log
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.log.flush()
+        self.tail.kill()
+        self.tail.wait()
+        sys.stdout = self.old_stdout
+        sys.stderr = self.old_stderr
+        print "Leaving %s" % self.path
+
+def expire_work_dirs():
+    dirs = sorted (map (lambda e: (os.stat(e).st_mtime,e),
+                        map (lambda e: os.path.join(work,e),
+                             filter (lambda e: e != "data",
+                                     os.listdir(work)))),
+                   lambda x,y: cmp(x[0],y[0]))
+    if len(dirs) > keep_work_dirs:
+        for d in dirs[0:len(dirs)-keep_work_dirs]:
+            print "Expiring %s" % d[1]
+            shutil.rmtree(d[1])
+
+def cmd(*args):
+    print "+", " ".join(list(args))
+    subprocess.check_call(list(args), stdout=sys.stdout, stderr=sys.stderr)
+
+def git(*args):
+    cmd("git", *args)
+
+# def upload_logs(sha):
+#     loc = "%s/%s" % (logdest_subdir, sha)
+#     cmd("ssh", logdest_server, "mkdir", "-p", "%s/%s" % (logdest_server_dir, loc))
+#     args = ([ "scp", "hubbot.log" ]
+#             + glob.glob("test/mock/*.log")
+#             + glob.glob("test/*.png")
+#             + [ "%s:%s/%s/" % (logdest_server, logdest_server_dir, loc) ]);
+#     cmd(*args)
+#     return "%s/%s/" % (logdest_http, loc)
+
+def github_get(url):
+    return json.loads(subprocess.check_output ([ "curl", "-s",
+                                                 "-H", "Authorization: token %s" % github_token,
+                                                 "https://api.github.com/repos/cockpit-project/cockpit/%s" % url,
+                                             ]))
+
+def add_github_comment(issue, message):
+    subprocess.check_call ([ "curl",
+                             "-H", "Authorization: token %s" % github_token,
+                             "https://api.github.com/repos/cockpit-project/cockpit/issues/%s/comments" % issue,
+                             "-d", json.dumps({"body": message})
+                           ])
+
+def add_comment(issue, message):
+    if issue:
+        add_github_comment(issue, message)
+    else:
+        print "+++ %s" % message
+
+def verify(ref, issue):
+    with WorkDir():
+        try:
+            # add_comment (issue, "Hubbot starting verification in %s" % os.getcwd())
+            git("init")
+            git("fetch", repo, ref)
+            git("checkout", "FETCH_HEAD")
+            git("fetch", master_repo, "master")
+            git("rebase", "FETCH_HEAD")
+            os.putenv("TEST_OS", "fedora-20")
+            os.putenv("TEST_ARCH", "x86_64")
+            os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
+            os.putenv("TEST_JOBS", "4")
+            cmd("./VERIFY")
+            add_comment (issue, ":+1:  (rebased to master, %s %s passed)" % ("fedora-20", "x86_64"))
+        except:
+            traceback.print_exc()
+            # add_comment (issue, "Hubbot failed")
+
+if len(sys.argv) == 2:
+    pull = sys.argv[1]
+    data = github_get("pulls/%s" % pull)
+    head = data['head']
+    repo = "git@github.com:%s" % head['repo']['full_name']
+    expire_work_dirs()
+    verify (head['ref'], pull)
