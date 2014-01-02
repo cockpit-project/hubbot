@@ -90,7 +90,7 @@ def github_get(url):
 def add_github_comment(issue, message):
     subprocess.check_call ([ "curl",
                              "-H", "Authorization: token %s" % github_token,
-                             "https://api.github.com/repos/cockpit-project/cockpit/issues/%s/comments" % issue,
+                             "https://api.github.com/repos/%s/issues/%s/comments" % (master_repo, issue),
                              "-d", json.dumps({"body": message})
                            ])
 
