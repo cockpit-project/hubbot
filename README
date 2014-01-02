@@ -14,8 +14,7 @@ main hacking repo isn't blocked while the test suite runs.
 
 Put something like this into $HOME/.hubbotrc:
 
-    { 'master_repo': "git@github.com:cockpit-project/cockpit.git",
-      'github_token': "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    { 'github_token': "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
     }
 
 The github_token is used to access the GitHub API.
@@ -32,3 +31,8 @@ To verify pull request number NNN, run
     $ hubbot NNN
 
 If successful, this will add a comment to the pull request.
+
+If the pull request is target at some other repo than
+cockpit-project/cockpit, you can pass it as well:
+
+    $ hubbot cgwalters/cockpit NNN

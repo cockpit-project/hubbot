@@ -15,7 +15,6 @@ work = "%s/hubbot/" % os.environ['HOME']
 
 config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
-master_repo = config['master_repo']
 github_token = config['github_token']
 
 def mk_exclusive_dir(path):
@@ -85,7 +84,7 @@ def git(*args):
 def github_get(url):
     return json.loads(subprocess.check_output ([ "curl", "-s",
                                                  "-H", "Authorization: token %s" % github_token,
-                                                 "https://api.github.com/repos/cockpit-project/cockpit/%s" % url,
+                                                 "https://api.github.com/repos/%s/%s" % (master_repo, url),
                                              ]))
 
 def add_github_comment(issue, message):
@@ -101,14 +100,14 @@ def add_comment(issue, message):
     else:
         print "+++ %s" % message
 
-def verify(ref, issue):
+def verify(pull_repo, ref, issue):
     with WorkDir():
         try:
             # add_comment (issue, "Hubbot starting verification in %s" % os.getcwd())
             git("init")
-            git("fetch", repo, ref)
+            git("fetch", "git@github.com:%s.git" % pull_repo, ref)
             git("checkout", "FETCH_HEAD")
-            git("fetch", master_repo, "master")
+            git("fetch", "git@github.com:%s.git" % master_repo, "master")
             git("rebase", "FETCH_HEAD")
             os.putenv("TEST_OS", "fedora-20")
             os.putenv("TEST_ARCH", "x86_64")
@@ -120,10 +119,21 @@ def verify(ref, issue):
             traceback.print_exc()
             # add_comment (issue, "Hubbot failed")
 
-if len(sys.argv) == 2:
+if len(sys.argv) == 3:
+    master_repo = sys.argv[1]
+    pull = sys.argv[2]
+elif len(sys.argv) == 2:
+    master_repo = "cockpit-project"
     pull = sys.argv[1]
-    data = github_get("pulls/%s" % pull)
-    head = data['head']
-    repo = "git@github.com:%s" % head['repo']['full_name']
-    expire_work_dirs()
-    verify (head['ref'], pull)
+else:
+    print "Usage: hubbot [MASTER-REPO] PULL"
+    exit(1)
+
+expire_work_dirs()
+
+if not "/" in master_repo:
+    master_repo = master_repo + "/cockpit"
+
+data = github_get("pulls/%s" % pull)
+head = data['head']
+verify (head['repo']['full_name'], head['ref'], pull)
