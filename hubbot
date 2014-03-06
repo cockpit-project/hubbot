@@ -68,8 +68,14 @@ def cmd(*args):
     print "+", " ".join(list(args))
     subprocess.check_call(list(args), stdout=sys.stdout, stderr=sys.stderr)
 
+def cmd_output(*args):
+    return subprocess.check_output(list(args))
+
 def git(*args):
     cmd("git", *args)
+
+def git_output(*args):
+    return cmd_output("git", *args)
 
 # def upload_logs(sha):
 #     loc = "%s/%s" % (logdest_subdir, sha)
@@ -106,15 +112,17 @@ def verify(pull_repo, ref, issue):
             # add_comment (issue, "Hubbot starting verification in %s" % os.getcwd())
             git("init")
             git("fetch", "https://github.com/%s.git" % pull_repo, ref)
+            branch = git_output("rev-parse", "FETCH_HEAD").strip()
             git("checkout", "FETCH_HEAD")
             git("fetch", "https://github.com/%s.git" % master_repo, "master")
+            master = git_output("rev-parse", "FETCH_HEAD").strip()
             git("rebase", "FETCH_HEAD")
             os.putenv("TEST_OS", "fedora-20")
             os.putenv("TEST_ARCH", "x86_64")
             os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
             os.putenv("TEST_JOBS", "4")
             cmd("./VERIFY")
-            add_comment (issue, ":+1:  (rebased to master, %s %s passed)" % ("fedora-20", "x86_64"))
+            add_comment (issue, ":+1:  (rebased %s to %s, %s %s passed)" % (branch, master, "fedora-20", "x86_64"))
         except:
             traceback.print_exc()
             # add_comment (issue, "Hubbot failed")
