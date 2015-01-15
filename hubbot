@@ -12,6 +12,7 @@ import ast
 
 keep_work_dirs = 10
 work = "%s/hubbot/" % os.environ['HOME']
+work_url = "http://files.cockpit-project.org/hubbot"
 
 config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
@@ -33,6 +34,8 @@ class WorkDir(object):
         while not mk_exclusive_dir (os.path.join (work, str(i))):
             i = i + 1
         self.path = os.path.join (work, str(i))
+        if work_url:
+            self.url = os.path.join (work_url, str(i))
 
     def __enter__(self):
         print "Entering %s" % self.path
@@ -44,6 +47,7 @@ class WorkDir(object):
         self.old_stdout.flush(); self.old_stderr.flush()
         sys.stdout = self.log
         sys.stderr = self.log
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.log.flush()
@@ -107,9 +111,9 @@ def add_comment(issue, message):
         print "+++ %s" % message
 
 def verify(pull_repo, ref, issue):
-    with WorkDir():
+    with WorkDir() as wd:
         try:
-            add_comment (issue, "Hubbot starting verification of %s" % ref)
+            add_comment (issue, "Hubbot starting verification in %s" % wd.url)
             git("init")
             git("fetch", "https://github.com/%s.git" % pull_repo, ref)
             branch = git_output("rev-parse", "FETCH_HEAD").strip()
