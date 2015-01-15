@@ -89,13 +89,13 @@ def git_output(*args):
 
 def github_get(url):
     return json.loads(subprocess.check_output ([ "curl", "-s",
-                                                 "-H", "Authorization: token %s" % github_token,
+                                                 "-u", "%s:x-oauth-basic" % github_token,
                                                  "https://api.github.com/repos/%s/%s" % (master_repo, url),
-                                             ]))
+]))
 
 def add_github_comment(issue, message):
     subprocess.check_call ([ "curl",
-                             "-H", "Authorization: token %s" % github_token,
+                             "-u", "%s:x-oauth-basic" % github_token,
                              "https://api.github.com/repos/%s/issues/%s/comments" % (master_repo, issue),
                              "-d", json.dumps({"body": message})
                            ])
@@ -109,7 +109,7 @@ def add_comment(issue, message):
 def verify(pull_repo, ref, issue):
     with WorkDir():
         try:
-            # add_comment (issue, "Hubbot starting verification in %s" % os.getcwd())
+            add_comment (issue, "Hubbot starting verification of %s" % ref)
             git("init")
             git("fetch", "https://github.com/%s.git" % pull_repo, ref)
             branch = git_output("rev-parse", "FETCH_HEAD").strip()
@@ -117,15 +117,15 @@ def verify(pull_repo, ref, issue):
             git("fetch", "https://github.com/%s.git" % master_repo, "master")
             master = git_output("rev-parse", "FETCH_HEAD").strip()
             git("rebase", "FETCH_HEAD")
-            os.putenv("TEST_OS", "fedora-20")
+            os.putenv("TEST_OS", "fedora-21")
             os.putenv("TEST_ARCH", "x86_64")
             os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
             os.putenv("TEST_JOBS", "4")
             cmd("./VERIFY")
-            add_comment (issue, ":+1:  (rebased %s to %s, %s %s passed)" % (branch, master, "fedora-20", "x86_64"))
+            add_comment (issue, ":+1:  (rebased %s to %s, %s %s passed)" % (branch, master, "fedora-21", "x86_64"))
         except:
             traceback.print_exc()
-            # add_comment (issue, "Hubbot failed")
+            add_comment (issue, "Hubbot failed")
 
 if len(sys.argv) == 3:
     master_repo = sys.argv[1]
