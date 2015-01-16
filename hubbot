@@ -100,14 +100,14 @@ def github_get(url):
 ]))
 
 def add_github_comment(issue, message):
-    subprocess.check_call ([ "curl",
+    subprocess.check_call ([ "curl", "-s",
                              "-u", "%s:x-oauth-basic" % github_token,
                              "https://api.github.com/repos/%s/issues/%s/comments" % (master_repo, issue),
                              "-d", json.dumps({"body": message})
                            ])
 
 def set_github_status(repo, sha, status):
-    subprocess.check_call ([ "curl",
+    subprocess.check_call ([ "curl", "-s",
                              "-u", "%s:x-oauth-basic" % github_token,
                              "https://api.github.com/repos/%s/statuses/%s" % (repo, sha),
                              "-d", json.dumps(status)
