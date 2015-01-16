@@ -104,16 +104,30 @@ def add_github_comment(issue, message):
                              "-d", json.dumps({"body": message})
                            ])
 
+def set_github_status(repo, sha, status):
+    subprocess.check_call ([ "curl",
+                             "-u", "%s:x-oauth-basic" % github_token,
+                             "https://api.github.com/repos/%s/statuses/%s" % (repo, sha),
+                             "-d", json.dumps(status)
+                           ])
+
 def add_comment(issue, message):
     if issue:
         add_github_comment(issue, message)
     else:
         print "+++ %s" % message
 
-def verify(pull_repo, ref, issue):
+def verify(head):
+    pull_repo = head['repo']['full_name']
+    ref = head['ref']
+    sha = head['sha']
+    context = "hubbot/f21/x86-64"
     with WorkDir() as wd:
         try:
-            add_comment (issue, "Hubbot starting verification in %s" % wd.url)
+            set_github_status(master_repo, sha, { "state": "pending",
+                                                  "description": "Hubbot is busy",
+                                                  "target_url": wd.url,
+                                                  "context": context })
             git("init")
             git("fetch", "https://github.com/%s.git" % pull_repo, ref)
             branch = git_output("rev-parse", "FETCH_HEAD").strip()
@@ -126,10 +140,16 @@ def verify(pull_repo, ref, issue):
             os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
             os.putenv("TEST_JOBS", "4")
             cmd("./VERIFY")
-            add_comment (issue, ":+1:  (rebased %s to %s, %s %s passed)" % (branch, master, "fedora-21", "x86_64"))
+            set_github_status(master_repo, sha, { "state": "success",
+                                                  "description": "Hubbot is happy",
+                                                  "target_url": wd.url,
+                                                  "context": context })
         except:
             traceback.print_exc()
-            add_comment (issue, "Hubbot failed")
+            set_github_status(master_repo, sha, { "state": "failure",
+                                                  "description": "Hubbot is sad",
+                                                  "target_url": wd.url,
+                                                  "context": context })
 
 if len(sys.argv) == 3:
     master_repo = sys.argv[1]
@@ -147,5 +167,4 @@ if not "/" in master_repo:
     master_repo = master_repo + "/cockpit"
 
 data = github_get("pulls/%s" % pull)
-head = data['head']
-verify (head['repo']['full_name'], head['ref'], pull)
+verify (data['head'])
