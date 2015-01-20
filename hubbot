@@ -191,6 +191,8 @@ if pull == "-":
         if needs_verify(p['head']):
             data = p
             break
+    print "No verifications pending"
+    exit (0)
 else:
     data = github_get("pulls/%s" % pull)
 
