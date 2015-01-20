@@ -9,10 +9,13 @@ import shutil
 import traceback
 import glob
 import ast
+import pprint
 
 keep_work_dirs = 10
 work = "%s/hubbot/" % os.environ['HOME']
 work_url = "http://files.cockpit-project.org/hubbot"
+
+user_whitelist = [ 'stefwalter', 'andreasn', 'mvollmer', 'petervo', 'dperpeet' ]
 
 config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
@@ -182,6 +185,9 @@ if not "/" in master_repo:
 if pull == "-":
     pulls = github_get("pulls")
     for p in pulls:
+        if p['head']['user']['login'] not in user_whitelist:
+            print "%s not in whitelist" % p['head']['user']['login']
+            continue
         if needs_verify(p['head']):
             data = p
             break
