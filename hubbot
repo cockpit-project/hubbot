@@ -182,6 +182,8 @@ expire_work_dirs()
 if not "/" in master_repo:
     master_repo = master_repo + "/cockpit"
 
+data = None
+
 if pull == "-":
     pulls = github_get("pulls")
     for p in pulls:
@@ -191,8 +193,9 @@ if pull == "-":
         if needs_verify(p['head']):
             data = p
             break
-    print "No verifications pending"
-    exit (0)
+    if not data:
+        print "No verifications pending"
+        exit (0)
 else:
     data = github_get("pulls/%s" % pull)
 
