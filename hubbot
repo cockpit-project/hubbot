@@ -153,6 +153,16 @@ def verify(head):
                                                   "target_url": wd.url,
                                                   "context": context })
 
+def needs_verify(head):
+    # XXX - check whether master has changed since last verify
+    status = github_get("commits/%s/status" % p['head']['sha'])
+    for s in status['statuses']:
+        if s['context'] == 'hubbot/f21/x86-64':
+            print "%s already verified" % p['head']['label']
+            return False
+    print "%s needs verification" % p['head']['label']
+    return True
+
 if len(sys.argv) == 3:
     master_repo = sys.argv[1]
     pull = sys.argv[2]
@@ -161,6 +171,7 @@ elif len(sys.argv) == 2:
     pull = sys.argv[1]
 else:
     print "Usage: hubbot [MASTER-REPO] PULL"
+    print "       hubbot [MASTER-REPO] -"
     exit(1)
 
 expire_work_dirs()
@@ -168,5 +179,13 @@ expire_work_dirs()
 if not "/" in master_repo:
     master_repo = master_repo + "/cockpit"
 
-data = github_get("pulls/%s" % pull)
+if pull == "-":
+    pulls = github_get("pulls")
+    for p in pulls:
+        if needs_verify(p['head']):
+            data = p
+            break
+else:
+    data = github_get("pulls/%s" % pull)
+
 verify (data['head'])
