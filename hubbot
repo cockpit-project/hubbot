@@ -206,7 +206,7 @@ def needs_verify(head):
             if old_master == master:
                 print "%s already verified" % head['label']
                 return False
-    print "%s needs verification" % (head['label'], reason)
+    print "%s needs verification" % head['label']
     return True
 
 def reset_pull(pull):
