@@ -1,0 +1,5 @@
+[Unit]
+Description=Hubbot
+
+[Service]
+ExecStart=/usr/local/bin/hubbot +
