@@ -4,7 +4,7 @@ Description=Hubbot
 [Service]
 ExecStart=/usr/local/bin/hubbot +
 User=hubbot
-Restart=success
+Restart=on-success
 RestartSec=2min
 
 [Install]
