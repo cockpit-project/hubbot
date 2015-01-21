@@ -15,7 +15,7 @@ import time
 dry_run = False
 tail_hubbot_log = True
 
-keep_work_dirs = 10
+keep_work_dirs = 30
 work = "%s/hubbot/" % os.environ['HOME']
 work_url = "http://files.cockpit-project.org/hubbot"
 
