@@ -43,6 +43,11 @@ creator is in the 'user_whitelist' mentioned above.
 If you pass "+" as the pull request, hubbot will sit in a loop and
 check pull requests as with "-".
 
+If you pass "~NNN" as the pull request, hubbot will just set the
+status of that pull request to "error".  This will cause that pull
+request to be considered as "needs verification" by the "-" and "+"
+modes described above.
+
 If the pull request is target at some other repo than
 cockpit-project/cockpit, you can pass it as well:
 

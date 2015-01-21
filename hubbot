@@ -171,7 +171,7 @@ def needs_verify(head):
     # XXX - check whether master has changed since last verify
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
-        if s['context'] == 'hubbot/f21/x86-64':
+        if s['context'] == 'hubbot/f21/x86-64' and not s['state'] == 'error':
             print "%s already verified" % head['label']
             return False
     print "%s needs verification" % head['label']
@@ -186,10 +186,20 @@ elif len(sys.argv) == 2:
 else:
     print "Usage: hubbot [MASTER-REPO] PULL"
     print "       hubbot [MASTER-REPO] -"
+    print "       hubbot [MASTER-REPO] +"
+    print "       hubbot [MASTER-REPO] ~PULL"
     exit(1)
 
 if not "/" in master_repo:
     master_repo = master_repo + "/cockpit"
+
+def reset_pull(pull):
+    context = "hubbot/f21/x86-64"
+    data = github_get("pulls/%s" % pull)
+    sha = data['head']['sha']
+    set_github_status(master_repo, sha, { "state": "error",
+                                          "description": "Hubbot will do this again",
+                                          "context": context })
 
 def verify_pull(pull):
     data = None
@@ -215,5 +225,7 @@ if pull == "+":
     while True:
         if not verify_pull("-"):
             time.sleep(120)
+elif pull[0] == '~':
+    reset_pull(pull[1:])
 else:
     verify_pull(pull)
