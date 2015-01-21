@@ -13,6 +13,7 @@ import pprint
 import time
 
 dry_run = False
+tail_hubbot_log = True
 
 keep_work_dirs = 10
 work = "%s/hubbot/" % os.environ['HOME']
@@ -49,7 +50,10 @@ class WorkDir(object):
         self.oldcwd = os.getcwd()
         os.chdir(self.path)
         self.log = open("hubbot.log", 'w', 1)
-        self.tail = subprocess.Popen([ "tail", "-f", "hubbot.log" ])
+        if tail_hubbot_log:
+            self.tail = subprocess.Popen([ "tail", "-f", "hubbot.log" ])
+        else:
+            self.tail = None
         self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
         self.old_stdout.flush(); self.old_stderr.flush()
         sys.stdout = self.log
@@ -58,8 +62,9 @@ class WorkDir(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.log.flush()
-        self.tail.kill()
-        self.tail.wait()
+        if self.tail:
+            self.tail.kill()
+            self.tail.wait()
         sys.stdout = self.old_stdout
         sys.stderr = self.old_stderr
         print "Leaving %s" % self.path
@@ -206,6 +211,7 @@ def verify_pull(pull):
     return True
 
 if pull == "+":
+    tail_hubbot_log = False
     while True:
         if not verify_pull("-"):
             time.sleep(120)
