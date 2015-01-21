@@ -171,7 +171,7 @@ def needs_verify(head):
     # XXX - check whether master has changed since last verify
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
-        if s['context'] == 'hubbot/f21/x86-64' and not s['state'] == 'error':
+        if s['context'] == 'hubbot/f21/x86-64' and s['state'] != 'error':
             print "%s already verified" % head['label']
             return False
     print "%s needs verification" % head['label']
