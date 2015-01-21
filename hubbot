@@ -13,7 +13,7 @@ import pprint
 import time
 
 dry_run = False
-tail_hubbot_log = True
+verbose = False
 
 keep_work_dirs = 30
 work = "%s/hubbot/" % os.environ['HOME']
@@ -46,11 +46,12 @@ class WorkDir(object):
             self.url = os.path.join (work_url, n)
 
     def __enter__(self):
-        print "Entering %s" % self.path
+        if verbose:
+            print "Entering %s" % self.path
         self.oldcwd = os.getcwd()
         os.chdir(self.path)
         self.log = open("hubbot.log", 'w', 1)
-        if tail_hubbot_log:
+        if verbose:
             self.tail = subprocess.Popen([ "tail", "-f", "hubbot.log" ])
         else:
             self.tail = None
@@ -67,7 +68,8 @@ class WorkDir(object):
             self.tail.wait()
         sys.stdout = self.old_stdout
         sys.stderr = self.old_stderr
-        print "Leaving %s" % self.path
+        if verbose:
+            print "Leaving %s" % self.path
 
 def expire_work_dirs():
     dirs = sorted (map (lambda e: (os.stat(e).st_mtime,e),
@@ -77,7 +79,8 @@ def expire_work_dirs():
                    lambda x,y: cmp(x[0],y[0]))
     if len(dirs) > keep_work_dirs:
         for d in dirs[0:len(dirs)-keep_work_dirs]:
-            print "Expiring %s" % d[1]
+            if verbose:
+                print "Expiring %s" % d[1]
             shutil.rmtree(d[1])
 
 def cmd(*args):
@@ -92,16 +95,6 @@ def git(*args):
 
 def git_output(*args):
     return cmd_output("git", *args)
-
-# def upload_logs(sha):
-#     loc = "%s/%s" % (logdest_subdir, sha)
-#     cmd("ssh", logdest_server, "mkdir", "-p", "%s/%s" % (logdest_server_dir, loc))
-#     args = ([ "scp", "hubbot.log" ]
-#             + glob.glob("test/mock/*.log")
-#             + glob.glob("test/*.png")
-#             + [ "%s:%s/%s/" % (logdest_server, logdest_server_dir, loc) ]);
-#     cmd(*args)
-#     return "%s/%s/" % (logdest_http, loc)
 
 def github_get(url):
     return json.loads(subprocess.check_output ([ "curl", "-s",
@@ -201,9 +194,11 @@ def needs_verify(head):
         if s['context'] == 'hubbot/f21/x86-64' and s['state'] != 'error':
             old_master = master_from_status(s)
             if old_master == master:
-                print "%s already verified" % head['label']
+                if verbose:
+                    print "%s already verified" % head['label']
                 return False
-    print "%s needs verification" % head['label']
+    if verbose:
+        print "%s needs verification" % head['label']
     return True
 
 def reset_pull(pull):
@@ -220,13 +215,15 @@ def verify_pull(pull):
         pulls = github_get("pulls")
         for p in pulls:
             if p['head']['user']['login'] not in user_whitelist:
-                print "%s not in whitelist" % p['head']['user']['login']
+                if verbose:
+                    print "%s not in whitelist" % p['head']['user']['login']
                 continue
             if needs_verify(p['head']):
                 data = p
                 break
         if not data:
-            print "No verifications pending"
+            if verbose:
+                print "No verifications pending"
             return False
     else:
         data = github_get("pulls/%s" % pull)
@@ -234,10 +231,10 @@ def verify_pull(pull):
     return True
 
 if pull == "+":
-    tail_hubbot_log = False
     verify_pull("-")
     exit(0)
 elif pull[0] == '~':
     reset_pull(pull[1:])
 else:
+    verbose = True
     verify_pull(pull)
