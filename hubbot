@@ -222,9 +222,8 @@ def verify_pull(pull):
 
 if pull == "+":
     tail_hubbot_log = False
-    while True:
-        if not verify_pull("-"):
-            time.sleep(120)
+    verify_pull("-")
+    exit(0)
 elif pull[0] == '~':
     reset_pull(pull[1:])
 else:

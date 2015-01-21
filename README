@@ -40,8 +40,11 @@ If you pass "-" as the pull request, hubbot will check all open pull
 requests and work on the first one that needs verification and whose
 creator is in the 'user_whitelist' mentioned above.
 
-If you pass "+" as the pull request, hubbot will sit in a loop and
-check pull requests as with "-".
+Passing "+" as the pull request is the same as passing "-", but
+doesn't show hubbot.log on the console.  [ Yes, this doesn't make
+sense, being silent should be an option.  "+" used to mean "sit in a
+poll loop" but it's better to let systemd worry about the
+restarting. ]
 
 If you pass "~NNN" as the pull request, hubbot will just set the
 status of that pull request to "error".  This will cause that pull

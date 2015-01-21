@@ -4,6 +4,8 @@ Description=Hubbot
 [Service]
 ExecStart=/usr/local/bin/hubbot +
 User=hubbot
+Restart=success
+RestartSec=2min
 
 [Install]
 WantedBy=multi-user.target
