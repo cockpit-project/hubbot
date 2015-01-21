@@ -120,11 +120,11 @@ def set_github_status(repo, sha, status):
     if dry_run:
         print "Status %s: %s" % (sha, status['description'])
     else:
-        subprocess.check_call ([ "curl", "-s",
-                                 "-u", "%s:x-oauth-basic" % github_token,
-                                 "https://api.github.com/repos/%s/statuses/%s" % (repo, sha),
-                                 "-d", json.dumps(status)
-                             ])
+        subprocess.check_output ([ "curl", "-s",
+                                   "-u", "%s:x-oauth-basic" % github_token,
+                                   "https://api.github.com/repos/%s/statuses/%s" % (repo, sha),
+                                   "-d", json.dumps(status)
+                                 ])
 
 def add_comment(issue, message):
     if issue:
