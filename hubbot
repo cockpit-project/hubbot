@@ -233,7 +233,7 @@ def verify_pull(pull):
                 if verbose:
                     print "%s not in whitelist" % p['head']['user']['login']
                 continue
-            if consider_head(p['head']):
+            if consider_head(p['head']) and not data:
                 data = p
         if not data:
             if verbose:
