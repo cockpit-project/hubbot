@@ -186,6 +186,14 @@ if not "/" in master_repo:
 
 master = github_get('branches/master')['commit']['sha']
 
+def reset_pull(pull):
+    context = "hubbot/f21/x86-64"
+    data = github_get("pulls/%s" % pull)
+    sha = data['head']['sha']
+    set_github_status(master_repo, sha, { "state": "error",
+                                          "description": "Hubbot will do this again",
+                                          "context": context })
+
 def master_from_status(status):
     path = "%s/%s/hubbot.master" % (work, os.path.basename(status['target_url']))
     if os.path.isfile(path):
@@ -194,26 +202,27 @@ def master_from_status(status):
     else:
         return ""
 
-def needs_verify(head):
+def consider_head(head):
+    context = "hubbot/f21/x86-64"
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
-        if s['context'] == 'hubbot/f21/x86-64' and s['state'] != 'error':
+        if s['context'] == context and s['state'] != 'error':
             old_master = master_from_status(s)
-            if old_master == master:
+            if old_master != master:
+                if verbose:
+                    print "%s needs to be re-verified" % head['label']
+                set_github_status(master_repo, head['sha'], { "state": "error",
+                                                              "description": "Hubbot needs to do this again because master has changed",
+                                                              "target_url": s['target_url'],
+                                                              "context": context })
+                return True
+            else:
                 if verbose:
                     print "%s already verified" % head['label']
                 return False
     if verbose:
         print "%s needs verification" % head['label']
     return True
-
-def reset_pull(pull):
-    context = "hubbot/f21/x86-64"
-    data = github_get("pulls/%s" % pull)
-    sha = data['head']['sha']
-    set_github_status(master_repo, sha, { "state": "error",
-                                          "description": "Hubbot will do this again",
-                                          "context": context })
 
 def verify_pull(pull):
     data = None
@@ -224,9 +233,8 @@ def verify_pull(pull):
                 if verbose:
                     print "%s not in whitelist" % p['head']['user']['login']
                 continue
-            if needs_verify(p['head']):
+            if consider_head(p['head']):
                 data = p
-                break
         if not data:
             if verbose:
                 print "No verifications pending"
