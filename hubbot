@@ -130,6 +130,7 @@ def verify(head):
     ref = head['ref']
     sha = head['sha']
     context = "hubbot/f21/x86-64"
+    rebase_done = False
     with WorkDir(sha) as wd:
         try:
             set_github_status(master_repo, sha, { "state": "pending",
@@ -146,6 +147,7 @@ def verify(head):
                 with open("hubbot.master", "w") as master_file:
                     master_file.write("%s\n" % master)
                 git("rebase", "FETCH_HEAD")
+                rebase_done = True
                 os.putenv("TEST_OS", "fedora-21")
                 os.putenv("TEST_ARCH", "x86_64")
                 os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
@@ -157,8 +159,12 @@ def verify(head):
                                                   "context": context })
         except:
             traceback.print_exc()
+            if rebase_done:
+                description = "Hubbot is sad"
+            else:
+                description = "Hubbot needs help with rebasing"
             set_github_status(master_repo, sha, { "state": "failure",
-                                                  "description": "Hubbot is sad",
+                                                  "description": description,
                                                   "target_url": wd.url,
                                                   "context": context })
 
