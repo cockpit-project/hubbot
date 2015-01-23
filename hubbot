@@ -229,6 +229,9 @@ def consider_head(head):
 
     if verbose:
         print "%s needs verification" % head['label']
+    set_github_status(master_repo, head['sha'], { "state": "pending",
+                                                  "description": "Hubbot will get to this eventually",
+                                                  "context": context })
     return True
 
 def verify_pull(pull):
