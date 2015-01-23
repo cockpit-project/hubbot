@@ -12,7 +12,7 @@ import ast
 import pprint
 import time
 
-dry_run = False
+dry_run = True
 verbose = False
 
 keep_work_dirs = 30
@@ -111,7 +111,7 @@ def add_github_comment(issue, message):
 
 def set_github_status(repo, sha, status):
     if dry_run:
-        print "Status %s: %s" % (sha, status['description'])
+        print "Status %s: %s %s" % (sha, status['state'], status['description'])
     else:
         subprocess.check_output ([ "curl", "-s",
                                    "-u", "%s:x-oauth-basic" % github_token,
@@ -190,7 +190,7 @@ def reset_pull(pull):
     context = "hubbot/f21/x86-64"
     data = github_get("pulls/%s" % pull)
     sha = data['head']['sha']
-    set_github_status(master_repo, sha, { "state": "error",
+    set_github_status(master_repo, sha, { "state": "pending",
                                           "description": "Hubbot will do this again",
                                           "context": context })
 
@@ -206,13 +206,13 @@ def consider_head(head):
     context = "hubbot/f21/x86-64"
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
-        if s['context'] == context and s['state'] != 'error':
+        if s['context'] == context and (s['state'] == 'success' or s['state'] == 'failure'):
             old_master = master_from_status(s)
             if old_master != master:
                 if verbose:
                     print "%s needs to be re-verified" % head['label']
-                set_github_status(master_repo, head['sha'], { "state": "error",
-                                                              "description": "Hubbot needs to do this again because master has changed",
+                set_github_status(master_repo, head['sha'], { "state": "pending",
+                                                              "description": "Hubbot will do this again because master has changed",
                                                               "target_url": s['target_url'],
                                                               "context": context })
                 return True
@@ -220,6 +220,13 @@ def consider_head(head):
                 if verbose:
                     print "%s already verified" % head['label']
                 return False
+        # Cleanup old use of 'error', which is ugly
+        if s['context'] == context and s['state'] == 'error':
+            set_github_status(master_repo, head['sha'], { "state": "pending",
+                                                          "description": s['description'],
+                                                          "target_url": s['target_url'],
+                                                          "context": context })
+
     if verbose:
         print "%s needs verification" % head['label']
     return True

@@ -3,8 +3,11 @@
 Hubbot is simplistic and not polished at all, but it might be useful
 nevertheless.
 
-The main point is to work with a fresh clone of the repo so that the
-main hacking repo isn't blocked while the test suite runs.
+DO NOT RUN THIS!  HUBBOT (AS IS) ONLY WORKS CORRECTLY IN ITS SPECIAL
+ENVIRONMENT ON OUR CI MACHINE.
+
+(Except to manually trigger retries, which should be moved into a
+separate tool...)
 
 ## Installing
 
@@ -47,7 +50,7 @@ poll loop" but it's better to let systemd worry about the
 restarting. ]
 
 If you pass "~NNN" as the pull request, hubbot will just set the
-status of that pull request to "error".  This will cause that pull
+status of that pull request to "pending".  This will cause that pull
 request to be considered as "needs verification" by the "-" and "+"
 modes described above.
 
