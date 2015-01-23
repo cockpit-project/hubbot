@@ -251,6 +251,7 @@ def verify_pull(pull):
             return False
     else:
         data = github_get("pulls/%s" % pull)
+    expire_work_dirs()
     verify (data['head'])
     return True
 
