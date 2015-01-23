@@ -14,6 +14,7 @@ import time
 
 dry_run = False
 verbose = False
+tail_log = False
 
 keep_work_dirs = 30
 work = "%s/hubbot/" % os.environ['HOME']
@@ -51,7 +52,7 @@ class WorkDir(object):
         self.oldcwd = os.getcwd()
         os.chdir(self.path)
         self.log = open("hubbot.log", 'w', 1)
-        if verbose:
+        if tail_log:
             self.tail = subprocess.Popen([ "tail", "-f", "hubbot.log" ])
         else:
             self.tail = None
