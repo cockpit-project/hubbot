@@ -12,7 +12,7 @@ import ast
 import pprint
 import time
 
-dry_run = True
+dry_run = False
 verbose = False
 
 keep_work_dirs = 30
