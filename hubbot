@@ -25,6 +25,10 @@ config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 github_token = config['github_token']
 user_whitelist = config['user_whitelist']
 
+def trace(msg):
+    if verbose:
+        print msg
+
 def mk_exclusive_dir(path):
     try:
         os.mkdir(path)
@@ -47,8 +51,7 @@ class WorkDir(object):
             self.url = os.path.join (work_url, n)
 
     def __enter__(self):
-        if verbose:
-            print "Entering %s" % self.path
+        trace("Entering %s" % self.path)
         self.oldcwd = os.getcwd()
         os.chdir(self.path)
         self.log = open("hubbot.log", 'w', 1)
@@ -69,8 +72,7 @@ class WorkDir(object):
             self.tail.wait()
         sys.stdout = self.old_stdout
         sys.stderr = self.old_stderr
-        if verbose:
-            print "Leaving %s" % self.path
+        trace("Leaving %s" % self.path)
 
 def expire_work_dirs():
     dirs = sorted (map (lambda e: (os.stat(e).st_mtime,e),
@@ -80,8 +82,7 @@ def expire_work_dirs():
                    lambda x,y: cmp(x[0],y[0]))
     if len(dirs) > keep_work_dirs:
         for d in dirs[0:len(dirs)-keep_work_dirs]:
-            if verbose:
-                print "Expiring %s" % d[1]
+            trace("Expiring %s" % d[1])
             shutil.rmtree(d[1])
 
 def cmd(*args):
@@ -211,23 +212,19 @@ def consider_head(head):
             if (s['state'] == 'success' or s['state'] == 'failure'):
                 old_master = master_from_status(s)
                 if old_master != master:
-                    if verbose:
-                        print "%s needs verification (master changed)" % head['label']
+                    trace("%s needs verification (master changed)" % head['label'])
                     set_github_status(master_repo, head['sha'], { "state": "pending",
                                                                   "description": "Hubbot will do this again because master has changed",
                                                                   "target_url": s['target_url'],
                                                                   "context": context })
                     return True
                 else:
-                    if verbose:
-                        print "%s already verified" % head['label']
+                    trace("%s already verified" % head['label'])
                     return False
             else:
-                if verbose:
-                    print "%s needs verification (pending or error)" % head['label']
+                trace("%s needs verification (pending or error)" % head['label'])
                 return True
-    if verbose:
-        print "%s needs verification (new)" % head['label']
+    trace("%s needs verification (new)" % head['label'])
     set_github_status(master_repo, head['sha'], { "state": "pending",
                                                   "description": "Hubbot will get to this eventually",
                                                   "context": context })
@@ -245,8 +242,7 @@ def verify_pull(pull):
             if consider_head(p['head']) and not data:
                 data = p
         if not data:
-            if verbose:
-                print "No verifications pending"
+            trace("No verifications pending")
             return False
     else:
         data = github_get("pulls/%s" % pull)
