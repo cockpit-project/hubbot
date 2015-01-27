@@ -1,0 +1,47 @@
+#! /usr/bin/python
+
+import subprocess
+import json
+import os
+import sys
+import ast
+
+config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
+
+github_token = config['github_token']
+
+def github_get(url):
+    return json.loads(subprocess.check_output ([ "curl", "-s",
+                                                 "-u", "%s:x-oauth-basic" % github_token,
+                                                 "https://api.github.com/repos/%s/%s" % (master_repo, url),
+]))
+
+def set_github_status(repo, sha, status):
+    subprocess.check_output ([ "curl", "-s",
+                               "-u", "%s:x-oauth-basic" % github_token,
+                               "https://api.github.com/repos/%s/statuses/%s" % (repo, sha),
+                               "-d", json.dumps(status)
+                           ])
+
+def trigger_pull(pull):
+    context = "hubbot/f21/x86-64"
+    data = github_get("pulls/%s" % pull)
+    sha = data['head']['sha']
+    set_github_status(master_repo, sha, { "state": "pending",
+                                          "description": "Hubbot will get to this eventually",
+                                          "context": context })
+
+if len(sys.argv) == 3:
+    master_repo = sys.argv[1]
+    pull = sys.argv[2]
+elif len(sys.argv) == 2:
+    master_repo = "cockpit-project"
+    pull = sys.argv[1]
+else:
+    print "Usage: trigger-hubbot [MASTER-REPO] PULL"
+    exit(1)
+
+if not "/" in master_repo:
+    master_repo = master_repo + "/cockpit"
+
+trigger_pull(pull)
