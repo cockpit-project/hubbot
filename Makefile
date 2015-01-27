@@ -1,2 +1,2 @@
 install:
-	install hubbot /usr/local/bin/
+	install trigger-hubbot /usr/local/bin/

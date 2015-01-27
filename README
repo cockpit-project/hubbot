@@ -3,58 +3,43 @@
 Hubbot is simplistic and not polished at all, but it might be useful
 nevertheless.
 
-DO NOT RUN THIS!  HUBBOT (AS IS) ONLY WORKS CORRECTLY IN ITS SPECIAL
+DO NOT RUN HUBBOT YOURSELF!  IT ONLY WORKS CORRECTLY IN ITS SPECIAL
 ENVIRONMENT ON OUR CI MACHINE.
 
-(Except to manually trigger retries, which should be moved into a
-separate tool...)
+But you might find the "trigger-hubbot" utility useful.  It can tell
+hubbot to work on a pull request, probably to retry a bogus failure.
+This could also be used to explicitly white-list pull requests from
+external contributors, but that doesn't work yet.
+
+The rest of this README is only about trigger-hubbot.
 
 ## Installing
 
-"make install" will copy hubbot to /usr/local/bin.
+"make install" will copy trigger-hubbot to /usr/local/bin.
 
 ## Setup
 
 Put something like this into $HOME/.hubbotrc:
 
     { 'github_token': "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-      'user_whitelist': [ "mvollmer", ... ]
     }
 
-The github_token is used to access the GitHub API.  The user whitelist
-is used to avoid working on pull request from untrusted sources.
+The github_token is used to access the GitHub API.  You can create one
+for your account at
 
-Hubbot sets TEST_DATA to $HOME/cockpit-data, so put your base tarballs
-and images there.
-
-Create the $HOME/hubbot directory.
+    https://github.com/settings/applications
 
 ## Running
 
-To verify pull request number NNN, run
+To mark pull request number NNN as 'pending', run
 
-    $ hubbot NNN
+    $ trigger-hubbot NNN
 
 This will update the status of the current head commit of the given
-pull request, similar to Travis CI.  (Note that this doesn't do any
-policy checks, such as looking into the user whitelist.)
-
-If you pass "-" as the pull request, hubbot will check all open pull
-requests and work on the first one that needs verification and whose
-creator is in the 'user_whitelist' mentioned above.
-
-Passing "+" as the pull request is the same as passing "-", but
-doesn't show hubbot.log on the console.  [ Yes, this doesn't make
-sense, being silent should be an option.  "+" used to mean "sit in a
-poll loop" but it's better to let systemd worry about the
-restarting. ]
-
-If you pass "~NNN" as the pull request, hubbot will just set the
-status of that pull request to "pending".  This will cause that pull
-request to be considered as "needs verification" by the "-" and "+"
-modes described above.
+pull request in a special way, and hubbot will eventually pick it up
+for verification.
 
 If the pull request is target at some other repo than
 cockpit-project/cockpit, you can pass it as well:
 
-    $ hubbot cgwalters/cockpit NNN
+    $ trigger-hubbot cgwalters/cockpit NNN
