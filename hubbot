@@ -213,10 +213,10 @@ def consider_head(head):
                 if old_master != master:
                     if verbose:
                         print "%s needs verification (master changed)" % head['label']
-                        set_github_status(master_repo, head['sha'], { "state": "pending",
-                                                                      "description": "Hubbot will do this again because master has changed",
-                                                                      "target_url": s['target_url'],
-                                                                      "context": context })
+                    set_github_status(master_repo, head['sha'], { "state": "pending",
+                                                                  "description": "Hubbot will do this again because master has changed",
+                                                                  "target_url": s['target_url'],
+                                                                  "context": context })
                     return True
                 else:
                     if verbose:
