@@ -127,7 +127,7 @@ def add_comment(issue, message):
     else:
         print "+++ %s" % message
 
-def verify(head):
+def verify(head, clean=False):
     pull_repo = head['repo']['full_name']
     ref = head['ref']
     sha = head['sha']
@@ -154,7 +154,10 @@ def verify(head):
                 os.putenv("TEST_ARCH", "x86_64")
                 os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
                 os.putenv("TEST_JOBS", "4")
-                cmd("./VERIFY")
+                if clean:
+                    cmd("./VERIFY", "--clean")
+                else:
+                    cmd("./VERIFY")
             set_github_status(master_repo, sha, { "state": "success",
                                                   "description": "Hubbot is happy",
                                                   "target_url": wd.url,
@@ -247,7 +250,13 @@ def verify_pull(pull):
     else:
         data = github_get("pulls/%s" % pull)
     expire_work_dirs()
-    verify (data['head'])
+    labels = github_get("issues/%s/labels" % data['number'])
+    clean = False
+    for l in labels:
+        if l['name'] == "hubbot:makeimages":
+            clean = True
+    trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
+    verify (data['head'], clean)
     return True
 
 if pull == "+":
