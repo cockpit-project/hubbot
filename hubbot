@@ -224,7 +224,7 @@ def consider_head(head):
                 else:
                     trace("%s already verified" % head['label'])
                     return False
-            else:
+            else if s['state'] == 'pending' or s['state'] == 'error':
                 trace("%s needs verification (pending or error)" % head['label'])
                 return True
     trace("%s needs verification (new)" % head['label'])
