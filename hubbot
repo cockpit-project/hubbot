@@ -227,6 +227,9 @@ def consider_head(head):
             elif s['state'] == 'pending' or s['state'] == 'error':
                 trace("%s needs verification (pending or error)" % head['label'])
                 return True
+            else:
+                trace("%s already failed" % head['label'])
+                return False
     trace("%s needs verification (new)" % head['label'])
     set_github_status(master_repo, head['sha'], { "state": "pending",
                                                   "description": "Hubbot will get to this eventually",
