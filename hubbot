@@ -212,12 +212,12 @@ def consider_head(head):
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
         if s['context'] == context:
-            if (s['state'] == 'success' or s['state'] == 'failure'):
+            if s['state'] == 'success':
                 old_master = master_from_status(s)
                 if old_master != master:
                     trace("%s needs verification (master changed)" % head['label'])
                     set_github_status(master_repo, head['sha'], { "state": "pending",
-                                                                  "description": "Hubbot will do this again because master has changed",
+                                                                  "description": "Hubbot was happy but will do this again because master has changed",
                                                                   "target_url": s['target_url'],
                                                                   "context": context })
                     return True
