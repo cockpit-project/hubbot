@@ -173,24 +173,6 @@ def verify(head, clean=False):
                                                   "target_url": wd.url,
                                                   "context": context })
 
-if len(sys.argv) == 3:
-    master_repo = sys.argv[1]
-    pull = sys.argv[2]
-elif len(sys.argv) == 2:
-    master_repo = "cockpit-project"
-    pull = sys.argv[1]
-else:
-    print "Usage: hubbot [MASTER-REPO] PULL"
-    print "       hubbot [MASTER-REPO] -"
-    print "       hubbot [MASTER-REPO] +"
-    print "       hubbot [MASTER-REPO] ~PULL"
-    exit(1)
-
-if not "/" in master_repo:
-    master_repo = master_repo + "/cockpit"
-
-master = github_get('branches/master')['commit']['sha']
-
 def reset_pull(pull):
     context = "hubbot/f21/x86-64"
     data = github_get("pulls/%s" % pull)
@@ -207,7 +189,7 @@ def master_from_status(status):
     else:
         return ""
 
-def consider_head(head):
+def consider_head(head, master):
     context = "hubbot/f21/x86-64"
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
@@ -236,22 +218,38 @@ def consider_head(head):
                                                   "context": context })
     return True
 
+def scan_pulls():
+    context = "hubbot/f21/x86-64"
+    pulls = github_get("pulls")
+    master = github_get('branches/master')['commit']['sha']
+    for p in pulls:
+        if p['head']['user']['login'] not in user_whitelist:
+            trace("%s not in whitelist" % p['head']['user']['login'])
+            continue
+        consider_head(p['head'], master)
+
+def head_is_pending(head):
+    context = "hubbot/f21/x86-64"
+    status = github_get("commits/%s/status" % head['sha'])
+    for s in status['statuses']:
+        if s['context'] == context and s['state'] == 'pending':
+            return True
+    return False
+
 def verify_pull(pull):
     data = None
     if pull == "-":
         pulls = github_get("pulls")
         for p in pulls:
-            if p['head']['user']['login'] not in user_whitelist:
-                if verbose:
-                    print "%s not in whitelist" % p['head']['user']['login']
-                continue
-            if consider_head(p['head']) and not data:
+            if head_is_pending(p['head']):
                 data = p
+                break
         if not data:
             trace("No verifications pending")
-            return False
+            return
     else:
         data = github_get("pulls/%s" % pull)
+
     expire_work_dirs()
     labels = github_get("issues/%s/labels" % data['number'])
     clean = False
@@ -260,13 +258,33 @@ def verify_pull(pull):
             clean = True
     trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
     verify (data['head'], clean)
-    return True
 
-if pull == "+":
-    verify_pull("-")
-    exit(0)
-elif pull[0] == '~':
-    reset_pull(pull[1:])
-else:
-    verbose = True
+if len(sys.argv) >= 2 and len(sys.argv) <= 4 and sys.argv[1] == 'verify':
+    if len(sys.argv) == 4:
+        master_repo = sys.argv[2]
+        pull = sys.argv[3]
+    elif len(sys.argv) == 3:
+        master_repo = "cockpit-project"
+        pull = sys.argv[3]
+    else:
+        master_repo = "cockpit-project"
+        pull = "-"
+
+    if not "/" in master_repo:
+        master_repo = master_repo + "/cockpit"
     verify_pull(pull)
+
+elif len(sys.argv) >= 2 and len(sys.argv) <= 3 and sys.argv[1] == 'scan':
+    if len(sys.argv) == 3:
+        master_repo = sys.argv[2]
+    else:
+        master_repo = "cockpit-project"
+
+    if not "/" in master_repo:
+        master_repo = master_repo + "/cockpit"
+    scan_pulls()
+
+else:
+    print "Usage: hubbot verify [REPO] [PULL]"
+    print "       hubbot scan [REPO]"
+    exit(1)

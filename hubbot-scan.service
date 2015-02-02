@@ -1,10 +1,10 @@
 [Unit]
-Description=Hubbot
+Description=Hubbot Scanning
 
 [Service]
-ExecStart=/usr/local/bin/hubbot +
+ExecStart=/usr/local/bin/hubbot scan
 User=hubbot
-Restart=on-success
+Restart=always
 RestartSec=2min
 
 [Install]

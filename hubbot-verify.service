@@ -1,0 +1,11 @@
+[Unit]
+Description=Hubbot Verification
+
+[Service]
+ExecStart=/usr/local/bin/hubbot verify
+User=hubbot
+Restart=always
+RestartSec=2min
+
+[Install]
+WantedBy=multi-user.target
