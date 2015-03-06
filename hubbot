@@ -48,7 +48,7 @@ class WorkDir(object):
             n = name + "." + str(i)
         self.path = os.path.join (work, n)
         if work_url:
-            self.url = os.path.join (work_url, n)
+            self.url = os.path.join (work_url, n, "hubbot.html")
 
     def __enter__(self):
         trace("Entering %s" % self.path)
