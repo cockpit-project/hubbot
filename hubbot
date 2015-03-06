@@ -54,7 +54,7 @@ class WorkDir(object):
         trace("Entering %s" % self.path)
         self.oldcwd = os.getcwd()
         os.chdir(self.path)
-        self.log = subprocess.Popen("hublog2html >hubbot.html", stdin=subprocess.PIPE, shell=True)
+        self.log = subprocess.Popen("hublog2html >hubbot.html", stdin=subprocess.PIPE, shell=True, bufsize=0)
         if tail_log:
             self.tail = subprocess.Popen([ "tail", "-f", "hubbot.log" ])
         else:
