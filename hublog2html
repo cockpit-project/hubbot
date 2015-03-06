@@ -15,4 +15,8 @@ function linkify() {
     sed -e "s,$1\(.*\),<a href=\"$2\\1\">\\0</a>,"
 }
 
-txt2html | wrap "$HEAD" "$FOOT" | linkify "$HOME/avocado/" "$HOME/avocado/"
+function style() {
+    sed -e "s,$1,<span style=\"$2\">\\0</span>,g"
+}
+
+txt2html | wrap "$HEAD" "$FOOT" | linkify "$HOME/avocado/" "$HOME/avocado/" | style PASS color:green | style FAIL color:red
