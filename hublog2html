@@ -4,7 +4,7 @@ HEAD="<html><body><a href=\".\">Result directory</a><pre>"
 FOOT="</pre></body></html>"
 
 function txt2html() {
-    sed -e 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&#39;/g'
+    sed -u -e 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&#39;/g'
 }
 
 function wrap() {
@@ -12,11 +12,11 @@ function wrap() {
 }
 
 function linkify() {
-    sed -e "s,$1\(.*\),<a href=\"$2\\1\">\\0</a>,"
+    sed -u -e "s,$1\(.*\),<a href=\"$2\\1\">\\0</a>,"
 }
 
 function style() {
-    sed -e "s,$1,<span style=\"$2\">\\0</span>,g"
+    sed -u -e "s,$1,<span style=\"$2\">\\0</span>,g"
 }
 
 txt2html | wrap "$HEAD" "$FOOT" | linkify "$HOME/avocado/" "$HOME/avocado/" | style PASS color:green | style FAIL color:red
