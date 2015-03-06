@@ -54,24 +54,25 @@ class WorkDir(object):
         trace("Entering %s" % self.path)
         self.oldcwd = os.getcwd()
         os.chdir(self.path)
-        self.log = open("hubbot.log", 'w', 1)
+        self.log = subprocess.Popen("hublog2html >hubbot.html", stdin=subprocess.PIPE, shell=True)
         if tail_log:
             self.tail = subprocess.Popen([ "tail", "-f", "hubbot.log" ])
         else:
             self.tail = None
         self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
         self.old_stdout.flush(); self.old_stderr.flush()
-        sys.stdout = self.log
-        sys.stderr = self.log
+        sys.stdout = self.log.stdin
+        sys.stderr = self.log.stdin
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.log.flush()
+        sys.stdout = self.old_stdout
+        sys.stderr = self.old_stderr
+        self.log.stdin.close()
+        self.log.wait()
         if self.tail:
             self.tail.kill()
             self.tail.wait()
-        sys.stdout = self.old_stdout
-        sys.stderr = self.old_stderr
         trace("Leaving %s" % self.path)
 
 def expire_work_dirs():
