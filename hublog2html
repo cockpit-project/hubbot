@@ -1,0 +1,18 @@
+#! /bin/bash
+
+HEAD="<html><body><a href=".">Result directory</a><pre>"
+FOOT="</pre></body></html>"
+
+function txt2html() {
+    sed -e 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&#39;/g'
+}
+
+function wrap() {
+    cat <(echo $1) - <(echo $2)
+}
+
+function linkify() {
+    sed -e "s,$1\(.*\),<a href=\"$2\\1\">\\0</a>,"
+}
+
+txt2html | wrap "$HEAD" "$FOOT" | linkify "$HOME/avocado/" "$HOME/avocado/"
