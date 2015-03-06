@@ -183,7 +183,7 @@ def reset_pull(pull):
                                           "context": context })
 
 def master_from_status(status):
-    path = "%s/%s/hubbot.master" % (work, os.path.basename(status['target_url']))
+    path = "%s/%s/hubbot.master" % (work, os.path.basename(os.path.dirname(status['target_url'])))
     if os.path.isfile(path):
         with open(path, "r") as master_file:
             return master_file.readline().strip()
