@@ -189,11 +189,18 @@ def master_from_status(status):
     else:
         return ""
 
+def status_is_success(status):
+    return status['state'] == 'success' and status['description'] == "Hubbot is happy"
+
+def status_is_pending(status):
+    return status['state'] == 'pending' or status['description'] == "Hubbot was happy but will do this again because master has changed" or status['description'] == "Hubbot will get to this eventually"
+
+
 def consider_head(head, master):
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
         if s['context'] == github_status_context:
-            if s['state'] == 'success' and s['description'] == "Hubbot is happy":
+            if status_is_success(s):
                 old_master = master_from_status(s)
                 if old_master != master:
                     trace("%s needs verification (master changed)" % head['label'])
@@ -205,7 +212,7 @@ def consider_head(head, master):
                 else:
                     trace("%s already verified" % head['label'])
                     return False
-            elif s['state'] == 'pending' or s['state'] == 'error' or s['description'] == "Hubbot was happy but will do this again because master has changed" or s['description'] == "Hubbot will get to this eventually":
+            elif status_is_pending(s) or s['state'] == 'error':
                 trace("%s needs verification (pending or error)" % head['label'])
                 return True
             else:
@@ -229,7 +236,7 @@ def scan_pulls():
 def head_is_pending(head):
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
-        if s['context'] == github_status_context and s['state'] == 'pending':
+        if s['context'] == github_status_context and status_is_pending(s):
             return True
     return False
 
