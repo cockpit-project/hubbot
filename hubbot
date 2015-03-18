@@ -256,7 +256,7 @@ def verify_pull(pull):
     trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
     verify (data['head'], clean)
 
-if os.environ["HUBBOT_NEW_STYLE"]:
+if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
     new_style = True
     work = "%s/hubbot.new/" % os.environ['HOME']
     work_url = "http://files.cockpit-project.org/hubbot.new"

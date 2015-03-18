@@ -55,7 +55,7 @@ def scan_pulls():
         if consider_head(p['head']):
             trigger_pull(str(p['number']))
 
-if os.environ["HUBBOT_NEW_STYLE"]:
+if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
     new_style = True
     github_status_context = "hubbot/f21/x86_64/new"
 
