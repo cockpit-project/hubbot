@@ -11,6 +11,7 @@ config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 github_token = config['github_token']
 user_whitelist = config['user_whitelist']
 
+new_style = False
 github_status_context = "hubbot/f21/x86-64"
 
 def trace(msg):
@@ -32,7 +33,7 @@ def set_github_status(repo, sha, status):
 def trigger_pull(pull):
     data = github_get("pulls/%s" % pull)
     sha = data['head']['sha']
-    set_github_status(master_repo, sha, { "state": "pending",
+    set_github_status(master_repo, sha, { "state": "pending" if not new_style else "success",
                                           "description": "Hubbot will get to this eventually",
                                           "context": github_status_context })
 
@@ -55,7 +56,7 @@ def scan_pulls():
             trigger_pull(str(p['number']))
 
 if os.environ["HUBBOT_NEW_STYLE"]:
-    print "New style!"
+    new_style = True
     github_status_context = "hubbot/f21/x86_64/new"
 
 if len(sys.argv) == 3:

@@ -139,7 +139,7 @@ def verify(head, clean=False):
     rebase_done = False
     with WorkDir(sha) as wd:
         try:
-            set_github_status(master_repo, sha, { "state": "pending",
+            set_github_status(master_repo, sha, { "state": "pending" if not new_style else "success",
                                                   "description": "Hubbot is busy",
                                                   "target_url": wd.url,
                                                   "context": github_status_context })
@@ -176,17 +176,10 @@ def verify(head, clean=False):
                 description = "Hubbot is sad"
             else:
                 description = "Hubbot needs help with rebasing"
-            set_github_status(master_repo, sha, { "state": "failure",
+            set_github_status(master_repo, sha, { "state": "failure" if not new_style else "success",
                                                   "description": description,
                                                   "target_url": wd.url,
                                                   "context": github_status_context })
-
-def reset_pull(pull):
-    data = github_get("pulls/%s" % pull)
-    sha = data['head']['sha']
-    set_github_status(master_repo, sha, { "state": "pending",
-                                          "description": "Hubbot will do this again",
-                                          "context": github_status_context })
 
 def master_from_status(status):
     path = "%s/%s/hubbot.master" % (work, os.path.basename(os.path.dirname(status['target_url'])))
@@ -200,11 +193,11 @@ def consider_head(head, master):
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
         if s['context'] == github_status_context:
-            if s['state'] == 'success':
+            if s['state'] == 'success' and s['description'] == "Hubbot is happy":
                 old_master = master_from_status(s)
                 if old_master != master:
                     trace("%s needs verification (master changed)" % head['label'])
-                    set_github_status(master_repo, head['sha'], { "state": "pending",
+                    set_github_status(master_repo, head['sha'], { "state": "success",
                                                                   "description": "Hubbot was happy but will do this again because master has changed",
                                                                   "target_url": s['target_url'],
                                                                   "context": github_status_context })
@@ -212,14 +205,14 @@ def consider_head(head, master):
                 else:
                     trace("%s already verified" % head['label'])
                     return False
-            elif s['state'] == 'pending' or s['state'] == 'error':
+            elif s['state'] == 'pending' or s['state'] == 'error' or s['description'] == "Hubbot was happy but will do this again because master has changed" or s['description'] == "Hubbot will get to this eventually":
                 trace("%s needs verification (pending or error)" % head['label'])
                 return True
             else:
                 trace("%s already failed" % head['label'])
                 return False
     trace("%s needs verification (new)" % head['label'])
-    set_github_status(master_repo, head['sha'], { "state": "pending",
+    set_github_status(master_repo, head['sha'], { "state": "pending" if not new_style else "success",
                                                   "description": "Hubbot will get to this eventually",
                                                   "context": github_status_context })
     return True
