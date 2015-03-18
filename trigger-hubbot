@@ -9,6 +9,12 @@ import ast
 config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
 github_token = config['github_token']
+user_whitelist = config['user_whitelist']
+
+github_status_context = "hubbot/f21/x86-64"
+
+def trace(msg):
+    print msg
 
 def github_get(url):
     return json.loads(subprocess.check_output ([ "curl", "-s",
@@ -24,12 +30,33 @@ def set_github_status(repo, sha, status):
                            ])
 
 def trigger_pull(pull):
-    context = "hubbot/f21/x86-64"
     data = github_get("pulls/%s" % pull)
     sha = data['head']['sha']
     set_github_status(master_repo, sha, { "state": "pending",
                                           "description": "Hubbot will get to this eventually",
-                                          "context": context })
+                                          "context": github_status_context })
+
+def consider_head(head):
+    status = github_get("commits/%s/status" % head['sha'])
+    for s in status['statuses']:
+        if s['context'] == github_status_context:
+            if s['state'] == 'failure':
+                return True
+    return False
+
+def scan_pulls():
+    pulls = github_get("pulls")
+    master = github_get('branches/master')['commit']['sha']
+    for p in pulls:
+        if p['head']['user']['login'] not in user_whitelist:
+            trace("%s not in whitelist" % p['head']['user']['login'])
+            continue
+        if consider_head(p['head']):
+            trigger_pull(str(p['number']))
+
+if os.environ["HUBBOT_NEW_STYLE"]:
+    print "New style!"
+    github_status_context = "hubbot/f21/x86_64/new"
 
 if len(sys.argv) == 3:
     master_repo = sys.argv[1]
@@ -44,4 +71,7 @@ else:
 if not "/" in master_repo:
     master_repo = master_repo + "/cockpit"
 
-trigger_pull(pull)
+if pull == "failed":
+    scan_pulls()
+else:
+    trigger_pull(pull)

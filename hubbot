@@ -16,6 +16,10 @@ dry_run = False
 verbose = False
 tail_log = False
 
+new_style = False
+
+github_status_context = "hubbot/f21/x86-64"
+
 keep_work_dirs = 30
 work = "%s/hubbot/" % os.environ['HOME']
 work_url = "http://files.cockpit-project.org/hubbot"
@@ -132,14 +136,13 @@ def verify(head, clean=False):
     pull_repo = head['repo']['full_name']
     ref = head['ref']
     sha = head['sha']
-    context = "hubbot/f21/x86-64"
     rebase_done = False
     with WorkDir(sha) as wd:
         try:
             set_github_status(master_repo, sha, { "state": "pending",
                                                   "description": "Hubbot is busy",
                                                   "target_url": wd.url,
-                                                  "context": context })
+                                                  "context": github_status_context })
             if not dry_run:
                 git("init")
                 git("fetch", "https://github.com/%s.git" % pull_repo, ref)
@@ -151,18 +154,22 @@ def verify(head, clean=False):
                     master_file.write("%s\n" % master)
                 git("rebase", "FETCH_HEAD")
                 rebase_done = True
-                os.putenv("TEST_OS", "fedora-21")
-                os.putenv("TEST_ARCH", "x86_64")
-                os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
-                os.putenv("TEST_JOBS", "4")
-                if clean:
-                    cmd("./VERIFY", "--clean")
+                if new_style:
+                    os.putenv("GUESTOS", "fedora-21")
+                    cmd("./VERIFY.new")
                 else:
-                    cmd("./VERIFY")
+                    os.putenv("TEST_OS", "fedora-21")
+                    os.putenv("TEST_ARCH", "x86_64")
+                    os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
+                    os.putenv("TEST_JOBS", "4")
+                    if clean:
+                        cmd("./VERIFY", "--clean")
+                    else:
+                        cmd("./VERIFY")
             set_github_status(master_repo, sha, { "state": "success",
                                                   "description": "Hubbot is happy",
                                                   "target_url": wd.url,
-                                                  "context": context })
+                                                  "context": github_status_context })
         except:
             traceback.print_exc()
             if rebase_done:
@@ -172,15 +179,14 @@ def verify(head, clean=False):
             set_github_status(master_repo, sha, { "state": "failure",
                                                   "description": description,
                                                   "target_url": wd.url,
-                                                  "context": context })
+                                                  "context": github_status_context })
 
 def reset_pull(pull):
-    context = "hubbot/f21/x86-64"
     data = github_get("pulls/%s" % pull)
     sha = data['head']['sha']
     set_github_status(master_repo, sha, { "state": "pending",
                                           "description": "Hubbot will do this again",
-                                          "context": context })
+                                          "context": github_status_context })
 
 def master_from_status(status):
     path = "%s/%s/hubbot.master" % (work, os.path.basename(os.path.dirname(status['target_url'])))
@@ -191,10 +197,9 @@ def master_from_status(status):
         return ""
 
 def consider_head(head, master):
-    context = "hubbot/f21/x86-64"
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
-        if s['context'] == context:
+        if s['context'] == github_status_context:
             if s['state'] == 'success':
                 old_master = master_from_status(s)
                 if old_master != master:
@@ -202,7 +207,7 @@ def consider_head(head, master):
                     set_github_status(master_repo, head['sha'], { "state": "pending",
                                                                   "description": "Hubbot was happy but will do this again because master has changed",
                                                                   "target_url": s['target_url'],
-                                                                  "context": context })
+                                                                  "context": github_status_context })
                     return True
                 else:
                     trace("%s already verified" % head['label'])
@@ -216,11 +221,10 @@ def consider_head(head, master):
     trace("%s needs verification (new)" % head['label'])
     set_github_status(master_repo, head['sha'], { "state": "pending",
                                                   "description": "Hubbot will get to this eventually",
-                                                  "context": context })
+                                                  "context": github_status_context })
     return True
 
 def scan_pulls():
-    context = "hubbot/f21/x86-64"
     pulls = github_get("pulls")
     master = github_get('branches/master')['commit']['sha']
     for p in pulls:
@@ -230,10 +234,9 @@ def scan_pulls():
         consider_head(p['head'], master)
 
 def head_is_pending(head):
-    context = "hubbot/f21/x86-64"
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
-        if s['context'] == context and s['state'] == 'pending':
+        if s['context'] == github_status_context and s['state'] == 'pending':
             return True
     return False
 
@@ -259,6 +262,12 @@ def verify_pull(pull):
             clean = True
     trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
     verify (data['head'], clean)
+
+if os.environ["HUBBOT_NEW_STYLE"]:
+    new_style = True
+    work = "%s/hubbot.new/" % os.environ['HOME']
+    work_url = "http://files.cockpit-project.org/hubbot.new"
+    github_status_context = "hubbot/f21/x86_64/new"
 
 if len(sys.argv) >= 2 and len(sys.argv) <= 4 and sys.argv[1] == 'verify':
     if len(sys.argv) == 4:
