@@ -22,12 +22,16 @@ The rest of this README is only about trigger-hubbot.
 Put something like this into $HOME/.hubbotrc:
 
     { 'github_token': "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      'user_whitelist': []
     }
 
 The github_token is used to access the GitHub API.  You can create one
 for your account at
 
     https://github.com/settings/applications
+
+When generating a new personal access token, the scope only needs to
+encompass public_repo (or repo if you're accessing a private repo).
 
 ## Running
 
