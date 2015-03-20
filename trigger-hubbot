@@ -12,7 +12,7 @@ github_token = config['github_token']
 user_whitelist = config['user_whitelist']
 
 new_style = False
-github_status_context = "hubbot/f21/x86-64"
+github_status_context = "hubbot/f22/x86-64"
 
 def trace(msg):
     print msg

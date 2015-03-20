@@ -18,7 +18,7 @@ tail_log = False
 
 new_style = False
 
-github_status_context = "hubbot/f21/x86-64"
+github_status_context = "hubbot/f22/x86-64"
 
 keep_work_dirs = 30
 work = "%s/hubbot/" % os.environ['HOME']
@@ -158,7 +158,7 @@ def verify(head, clean=False):
                     os.putenv("GUESTOS", "fedora-21")
                     cmd("./VERIFY.new")
                 else:
-                    os.putenv("TEST_OS", "fedora-21")
+                    os.putenv("TEST_OS", "fedora-22")
                     os.putenv("TEST_ARCH", "x86_64")
                     os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
                     os.putenv("TEST_JOBS", "4")
