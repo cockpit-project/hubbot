@@ -57,7 +57,7 @@ def scan_pulls():
 
 if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
     new_style = True
-    github_status_context = "hubbot/f21/x86_64/new"
+    github_status_context = "hubbot/f22/x86_64/new"
 
 if len(sys.argv) == 3:
     master_repo = sys.argv[1]
