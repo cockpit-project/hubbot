@@ -245,13 +245,33 @@ def verify_pull(pull):
     data = None
     if pull == "-":
         pulls = github_get("pulls")
+        # Find pull, but prioritize:
+        #  2 Work in progress
+        #  1 needswork,needsdesign
+        #  0 default
+        # Pulls with a lower priority will be checked first
+        viable_pulls = [ ];
         for p in pulls:
             if head_is_pending(p['head']):
-                data = p
-                break
-        if not data:
+                priority = 0
+                if p['title'].lower().startswith('wip'):
+                    priority = 2
+                else:
+                    # check labels
+                    p_labels = github_get("issues/%s/labels" % p['number'])
+                    for l in p_labels:
+                        if l['name'] in ['needswork', 'needsdesign']:
+                            priority = 1
+                trace("%s is pending with priority %d" % (p['head']['label'], priority))
+                viable_pulls.append((p, priority))
+
+        # sort by priority
+        if len(viable_pulls) == 0:
             trace("No verifications pending")
             return
+
+        data = sorted(viable_pulls, key=lambda x: x[1])[0][0]
+
     else:
         data = github_get("pulls/%s" % pull)
 
