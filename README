@@ -22,8 +22,15 @@ The rest of this README is only about trigger-hubbot.
 Put something like this into $HOME/.hubbotrc:
 
     { 'github_token': "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-      'user_whitelist': []
+      'user_whitelist': [],
+      'master_repo': "cockpit-project/cockpit",
+      'os_arch': [('fedora-22', 'f22', 'x86_64'),('rhel-7', 'r7', 'x86_64')]],
+      'default': ('fedora-22', 'f22', 'x86_64')
     }
+
+'os_arch' entries consist of: (os name, short name, architecture)
+Of these, os name and architecture will be used to find the correct images,
+whereas the short name is used for status messages.
 
 The github_token is used to access the GitHub API.  You can create one
 for your account at

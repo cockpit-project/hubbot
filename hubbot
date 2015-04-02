@@ -18,8 +18,6 @@ tail_log = False
 
 new_style = False
 
-github_status_context = "hubbot/f22/x86-64"
-
 keep_work_dirs = 30
 work = "%s/hubbot/" % os.environ['HOME']
 work_url = "http://files.cockpit-project.org/hubbot"
@@ -28,6 +26,17 @@ config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
 github_token = config['github_token']
 user_whitelist = config['user_whitelist']
+master_repo = config['master_repo']
+os_arch_configurations = config['os_arch']
+
+default_os = 'fedora-22'
+default_short = 'f22'
+default_arch = 'x86_64'
+
+if 'default' in config:
+    (default_os, default_short, default_arch) = config['default']
+
+github_status_context = "hubbot/%s/%s" % (default_short, default_arch.replace('_', '-'))
 
 def trace(msg):
     if verbose:
@@ -107,7 +116,7 @@ def github_get(url):
     return json.loads(subprocess.check_output ([ "curl", "-s",
                                                  "-u", "%s:x-oauth-basic" % github_token,
                                                  "https://api.github.com/repos/%s/%s" % (master_repo, url),
-]))
+                                               ]))
 
 def add_github_comment(issue, message):
     subprocess.check_call ([ "curl", "-s",
@@ -159,8 +168,8 @@ def verify(head, clean=False):
                     os.putenv("GUEST_NUMBER", "22")
                     cmd("./VERIFY.new")
                 else:
-                    os.putenv("TEST_OS", "fedora-22")
-                    os.putenv("TEST_ARCH", "x86_64")
+                    os.putenv("TEST_OS", default_os)
+                    os.putenv("TEST_ARCH", default_arch)
                     os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
                     os.putenv("TEST_JOBS", "4")
                     if clean:
@@ -288,34 +297,37 @@ if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
     new_style = True
     work = "%s/hubbot.new/" % os.environ['HOME']
     work_url = "http://files.cockpit-project.org/hubbot.new"
-    github_status_context = "hubbot/f22/x86_64/new"
+    github_status_context = "hubbot/%s/%s/new" % (default_short, default_arch.replace('_', '-'))
 
-if len(sys.argv) >= 2 and len(sys.argv) <= 4 and sys.argv[1] == 'verify':
+def print_usage():
+    print "Usage: hubbot verify [ [REPO] PULL ]"
+    print "       hubbot scan [REPO]"
+
+if len(sys.argv) < 2:
+    print_usage()
+    exit(1)
+
+elif sys.argv[1] == 'verify' and len(sys.argv) <= 4:
     if len(sys.argv) == 4:
         master_repo = sys.argv[2]
         pull = sys.argv[3]
     elif len(sys.argv) == 3:
-        master_repo = "cockpit-project"
         pull = sys.argv[3]
     else:
-        master_repo = "cockpit-project"
         pull = "-"
 
     if not "/" in master_repo:
         master_repo = master_repo + "/cockpit"
     verify_pull(pull)
 
-elif len(sys.argv) >= 2 and len(sys.argv) <= 3 and sys.argv[1] == 'scan':
+elif sys.argv[1] == 'scan' and len(sys.argv) <= 3:
     if len(sys.argv) == 3:
         master_repo = sys.argv[2]
-    else:
-        master_repo = "cockpit-project"
 
     if not "/" in master_repo:
         master_repo = master_repo + "/cockpit"
     scan_pulls()
 
 else:
-    print "Usage: hubbot verify [REPO] [PULL]"
-    print "       hubbot scan [REPO]"
+    print_usage()
     exit(1)
