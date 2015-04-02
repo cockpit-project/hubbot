@@ -26,8 +26,14 @@ config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
 github_token = config['github_token']
 user_whitelist = config['user_whitelist']
-master_repo = config['master_repo']
-os_arch_configurations = config['os_arch']
+
+master_repo = 'cockpit-project/cockpit'
+if 'master_repo' in config:
+    master_repo = config['master_repo']
+
+os_arch_configurations = []
+if 'os_arch' in config:
+    os_arch_configurations = config['os_arch']
 
 default_os = 'fedora-22'
 default_short = 'f22'
@@ -234,10 +240,34 @@ def consider_head(head, master):
                                                   "context": github_status_context })
     return True
 
-def scan_pulls():
+def get_sorted_pulls():
     pulls = github_get("pulls")
-    master = github_get('branches/master')['commit']['sha']
+    # Find pull, but prioritize:
+    #  2 Work in progress
+    #  1 needswork,needsdesign
+    #  0 default
+    # Pulls with a lower priority will be checked first
+    viable_pulls = [ ];
     for p in pulls:
+        priority = 0
+        if p['title'].lower().startswith('wip'):
+            priority = 2
+        else:
+            # check labels
+            p_labels = github_get("issues/%s/labels" % p['number'])
+            for l in p_labels:
+                if l['name'] in ['needswork', 'needsdesign']:
+                    priority = 1
+        viable_pulls.append((p, priority))
+
+    # sort by priority
+    return sorted(viable_pulls, key=lambda x: x[1])
+
+def scan_pulls():
+    pulls = get_sorted_pulls()
+    master = github_get('branches/master')['commit']['sha']
+    for pull_info in pulls:
+        p = pull_info[0]
         if p['head']['user']['login'] not in user_whitelist:
             trace("%s not in whitelist" % p['head']['user']['login'])
             continue
@@ -253,33 +283,18 @@ def head_is_pending(head):
 def verify_pull(pull):
     data = None
     if pull == "-":
-        pulls = github_get("pulls")
-        # Find pull, but prioritize:
-        #  2 Work in progress
-        #  1 needswork,needsdesign
-        #  0 default
-        # Pulls with a lower priority will be checked first
-        viable_pulls = [ ];
-        for p in pulls:
-            if head_is_pending(p['head']):
-                priority = 0
-                if p['title'].lower().startswith('wip'):
-                    priority = 2
-                else:
-                    # check labels
-                    p_labels = github_get("issues/%s/labels" % p['number'])
-                    for l in p_labels:
-                        if l['name'] in ['needswork', 'needsdesign']:
-                            priority = 1
-                trace("%s is pending with priority %d" % (p['head']['label'], priority))
-                viable_pulls.append((p, priority))
+        pulls = get_sorted_pulls()
 
-        # sort by priority
-        if len(viable_pulls) == 0:
+        # use first pending pull in sorted list
+        for pull_info in pulls:
+            p = pull_info[0]
+            if head_is_pending(p['head']):
+                data = p
+                break
+
+        if data is None:
             trace("No verifications pending")
             return
-
-        data = sorted(viable_pulls, key=lambda x: x[1])[0][0]
 
     else:
         data = github_get("pulls/%s" % pull)
