@@ -51,6 +51,7 @@ pull_status_running = 'running'
 pull_status_finished = 'finished'
 
 status_message_running = 'Hubbot is busy'
+status_message_master_changed = 'Hubbot was happy but will do this again because master has changed'
 
 def trace(msg):
     if verbose:
@@ -217,7 +218,7 @@ def status_is_success(status):
     return status['state'] == 'success' and status['description'] == "Hubbot is happy"
 
 def status_is_pending(status):
-    return status['state'] == 'pending' or status['description'] == "Hubbot was happy but will do this again because master has changed" or status['description'] == "Hubbot will get to this eventually"
+    return status['state'] == 'pending' or status['description'] == status_message_master_changed or status['description'] == "Hubbot will get to this eventually"
 
 def consider_head(head, master):
     status = github_get("commits/%s/status" % head['sha'])
@@ -228,13 +229,15 @@ def consider_head(head, master):
                 if old_master != master:
                     trace("%s needs verification (master changed)" % head['label'])
                     set_github_status(master_repo, head['sha'], { "state": "success",
-                                                                  "description": "Hubbot was happy but will do this again because master has changed",
+                                                                  "description": status_message_master_changed,
                                                                   "target_url": s['target_url'],
                                                                   "context": github_status_context })
                     return (pull_status_pending, 'already passed, but master changed')
                 else:
                     trace("%s already verified" % head['label'])
                     return (pull_status_finished, 'passed')
+            elif s['description'] == status_message_master_changed:
+                return (pull_status_pending, 'already passed, but master changed')
             elif s['state'] == 'error':
                 trace("%s needs verification (error)" % head['label'])
                 return (pull_status_pending, '')
@@ -243,6 +246,8 @@ def consider_head(head, master):
                 if (s['description'] == status_message_running):
                     return (pull_status_running, '')
                 return (pull_status_pending, '')
+            elif s['description'] == "Hubbot needs help with rebasing":
+                return (pull_status_finished, 'failed, needs rebase')
             else:
                 trace("%s already failed" % head['label'])
                 return (pull_status_finished, 'failed')
@@ -295,7 +300,9 @@ def print_jobs_table(title, jobs):
         # get status, filtered by entries that concern us
         status = github_get("commits/%s/status" % head['sha'])
         if status and status['statuses']:
-            status = filter(lambda s: s['context'] == github_status_context and 'hubbot' in s['target_url'], status['statuses'])
+            status = filter(lambda s: s['context'] == github_status_context and
+                                      'hubbot' in "%s" % (s['target_url']),
+                            status['statuses'])
         if status:
             # most recent entry will be first
             hubbot_link = "<a href=\"%s\">hubbot output</a>" % (status[0]['target_url'])
