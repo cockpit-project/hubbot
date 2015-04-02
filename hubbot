@@ -11,6 +11,7 @@ import glob
 import ast
 import pprint
 import time
+import datetime
 
 dry_run = False
 verbose = False
@@ -43,6 +44,13 @@ if 'default' in config:
     (default_os, default_short, default_arch) = config['default']
 
 github_status_context = "hubbot/%s/%s" % (default_short, default_arch.replace('_', '-'))
+
+pull_status_skip = 'skip'
+pull_status_pending = 'pending'
+pull_status_running = 'running'
+pull_status_finished = 'finished'
+
+status_message_running = 'Hubbot is busy'
 
 def trace(msg):
     if verbose:
@@ -155,7 +163,7 @@ def verify(head, clean=False):
     with WorkDir(sha) as wd:
         try:
             set_github_status(master_repo, sha, { "state": "pending" if not new_style else "success",
-                                                  "description": "Hubbot is busy",
+                                                  "description": status_message_running,
                                                   "target_url": wd.url,
                                                   "context": github_status_context })
             if not dry_run:
@@ -211,7 +219,6 @@ def status_is_success(status):
 def status_is_pending(status):
     return status['state'] == 'pending' or status['description'] == "Hubbot was happy but will do this again because master has changed" or status['description'] == "Hubbot will get to this eventually"
 
-
 def consider_head(head, master):
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
@@ -224,21 +231,140 @@ def consider_head(head, master):
                                                                   "description": "Hubbot was happy but will do this again because master has changed",
                                                                   "target_url": s['target_url'],
                                                                   "context": github_status_context })
-                    return True
+                    return (pull_status_pending, 'already passed, but master changed')
                 else:
                     trace("%s already verified" % head['label'])
-                    return False
-            elif status_is_pending(s) or s['state'] == 'error':
-                trace("%s needs verification (pending or error)" % head['label'])
-                return True
+                    return (pull_status_finished, 'passed')
+            elif s['state'] == 'error':
+                trace("%s needs verification (error)" % head['label'])
+                return (pull_status_pending, '')
+            elif status_is_pending(s):
+                trace("%s needs verification (pending)" % head['label'])
+                if (s['description'] == status_message_running):
+                    return (pull_status_running, '')
+                return (pull_status_pending, '')
             else:
                 trace("%s already failed" % head['label'])
-                return False
+                return (pull_status_finished, 'failed')
     trace("%s needs verification (new)" % head['label'])
     set_github_status(master_repo, head['sha'], { "state": "pending" if not new_style else "success",
                                                   "description": "Hubbot will get to this eventually",
                                                   "context": github_status_context })
-    return True
+    return (pull_status_pending, '')
+
+def print_jobs_table(title, jobs):
+    if not jobs:
+        return """
+      <div class="container">
+      <h2>%s</h2>
+      <p>No entries.</p>
+      </div><!-- /.container -->
+""" % (title)
+    text = """
+    <div class="container">
+
+      <h2>%s</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>User</th>
+            <th>Status</th>
+            <th>Priority</th>
+            <th>Comment</th>
+          </tr>
+        </thead>
+        <tbody>
+""" % (title)
+    for job in jobs:
+        job_class = ''
+        if job[2] == pull_status_finished:
+            if 'passed' in job[3]:
+                job_class = 'success'
+            elif 'failed' in job[3]:
+                job_class = 'danger'
+        elif job[2] == pull_status_pending and 'passed' in job[3]:
+            job_class = 'success'
+        elif job[3] == 'rejected user':
+            job_class = 'warning'
+        p = job[0]
+        head = p['head']
+        job_desc = "<a href=\"%s\">%s</a>" % (p['html_url'], p['title'])
+
+        comment = job[3]
+        # get status filtered by entries that concern us
+        status = filter(lambda s: s['context'] == github_status_context and 'hubbot' in s['target_url'],
+                        github_get("commits/%s/status" % head['sha'])['statuses'])
+        if status:
+            # most recent entry will be first
+            hubbot_link = "<a href=\"%s\">hubbot output</a>" % (status[0]['target_url'])
+            if len(comment) > 0:
+                comment += " (%s)" % (hubbot_link)
+            else:
+                comment = hubbot_link
+
+        text = text + """
+          <tr class="%s">
+            <td>%s</td>
+            <td>%s</td>
+            <td>%s</td>
+            <td>%s</td>
+            <td>%s</td>
+          </tr>""" % (job_class, job_desc, head['user']['login'], job[2], job[1], comment)
+    text = text + """
+        </tbody>
+      </table>
+    </div><!-- /.container -->
+"""
+    return text
+
+# Publish scan info in html format
+def publish_status(extended_info):
+    header = """<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+    <meta name="description" content="">
+    <meta name="author" content="Cockpit Project">
+    <!--<link rel="icon" href="../../favicon.ico">-->
+
+    <title>Cockpit - Hubbot Status</title>
+
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+
+    <!-- Optional theme -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap-theme.min.css">
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+      <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+  </head>
+
+  <body>
+    <h1>Status at: %s UTC</h1>
+""" % (datetime.datetime.utcnow())
+    footer = """
+    <!-- Bootstrap core JavaScript
+    ================================================== -->
+    <!-- Latest compiled and minified JavaScript -->
+    <!--<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>-->
+  </body>
+</html>
+"""
+    # print all elements in their respective category
+    tables = print_jobs_table('pending jobs', filter(lambda p: p[2] in [pull_status_pending, pull_status_running], extended_info))
+    tables += print_jobs_table('finished jobs', filter(lambda p: p[2] == pull_status_finished, extended_info))
+    tables += print_jobs_table('skipped jobs', filter(lambda p: p[2] == pull_status_skip, extended_info))
+
+    # write finished html file
+    with open("%sindex.html" % (work), "w") as out_file:
+        out_file.write(header + tables + footer)
 
 def get_sorted_pulls():
     pulls = github_get("pulls")
@@ -266,12 +392,16 @@ def get_sorted_pulls():
 def scan_pulls():
     pulls = get_sorted_pulls()
     master = github_get('branches/master')['commit']['sha']
+    extended_info = []
     for pull_info in pulls:
         p = pull_info[0]
         if p['head']['user']['login'] not in user_whitelist:
             trace("%s not in whitelist" % p['head']['user']['login'])
+            extended_info.append((p, pull_info[1], pull_status_skip, 'rejected user'))
             continue
-        consider_head(p['head'], master)
+        (pull_status, pull_comment) = consider_head(p['head'], master)
+        extended_info.append((p, pull_info[1], pull_status, pull_comment))
+    publish_status(extended_info)
 
 def head_is_pending(head):
     status = github_get("commits/%s/status" % head['sha'])
