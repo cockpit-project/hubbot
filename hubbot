@@ -292,9 +292,10 @@ def print_jobs_table(title, jobs):
         job_desc = "<a href=\"%s\">%s</a>" % (p['html_url'], p['title'])
 
         comment = job[3]
-        # get status filtered by entries that concern us
-        status = filter(lambda s: s['context'] == github_status_context and 'hubbot' in s['target_url'],
-                        github_get("commits/%s/status" % head['sha'])['statuses'])
+        # get status, filtered by entries that concern us
+        status = github_get("commits/%s/status" % head['sha'])
+        if status and status['statuses']:
+            status = filter(lambda s: s['context'] == github_status_context and 'hubbot' in s['target_url'], status['statuses'])
         if status:
             # most recent entry will be first
             hubbot_link = "<a href=\"%s\">hubbot output</a>" % (status[0]['target_url'])
@@ -442,7 +443,7 @@ if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
     new_style = True
     work = "%s/hubbot.new/" % os.environ['HOME']
     work_url = "http://files.cockpit-project.org/hubbot.new"
-    github_status_context = "hubbot/%s/%s/new" % (default_short, default_arch.replace('_', '-'))
+    github_status_context = "hubbot/f22/x86_64/new"
 
 def print_usage():
     print "Usage: hubbot verify [ [REPO] PULL ]"
