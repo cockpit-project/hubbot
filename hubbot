@@ -477,7 +477,12 @@ def get_sorted_pulls():
             for l in p_labels:
                 if l['name'] in ['needswork', 'needsdesign']:
                     priority = priority_needs_attention
-        viable_pulls.append((p, priority))
+        for config in os_arch_configurations:
+            status_context = status_context_from_config(config)
+            priority_offset = 0
+            if config != default_arch_config:
+                priority_offset += priority_penalty_other_config
+            viable_pulls.append((p, priority+priority_offset, status_context))
 
     # sort by priority
     return sorted(viable_pulls, key=lambda x: x[1])
@@ -531,9 +536,10 @@ def consider_master(master, get_only=False):
         viable_checks.append(entry)
 
 
+    # sort by priority
     return sorted(viable_checks, key=lambda x: x[1])
 
-def scan_pulls(status_context):
+def scan_pulls():
     pulls = get_sorted_pulls()
     master = github_get('branches/master')
     master_sha = master['commit']['sha']
@@ -542,13 +548,15 @@ def scan_pulls(status_context):
         p = pull_info[0]
         if p['head']['user']['login'] not in user_whitelist:
             trace("%s not in whitelist" % p['head']['user']['login'])
-            extended_info.append((p, pull_info[1], pull_status_skip, 'rejected user', True, status_context))
+            extended_info.append((p, pull_info[1], pull_status_skip, 'rejected user', True, pull_info[2]))
             continue
-        (pull_status, pull_comment) = consider_head(p['head'], master_sha, status_context)
-        extended_info.append((p, pull_info[1], pull_status, pull_comment, True, status_context))
+        (pull_status, pull_comment) = consider_head(p['head'], master_sha, pull_info[2])
+        extended_info.append((p, pull_info[1], pull_status, pull_comment, True, pull_info[2]))
     master_info = consider_master(master)
     if master_info:
         extended_info.extend(master_info)
+        # sort by priority
+        extended_info = sorted(extended_info, key=lambda x: x[1])
     publish_status(extended_info)
 
 def head_is_pending(head, status_context):
@@ -567,9 +575,10 @@ def verify_pull(pull):
         # use first pending pull in sorted list
         for pull_info in pulls:
             p = pull_info[0]
-            if head_is_pending(p['head'], status_context):
+            if head_is_pending(p['head'], pull_info[2]):
                 data = p
                 priority = pull_info[1]
+                status_context = pull_info[2]
                 break
 
         # consider checking master
@@ -642,7 +651,7 @@ elif sys.argv[1] == 'scan' and len(sys.argv) <= 3:
 
     if not "/" in master_repo:
         master_repo = master_repo + "/cockpit"
-    scan_pulls(status_context_from_config(default_arch_config))
+    scan_pulls()
 
 else:
     print_usage()
