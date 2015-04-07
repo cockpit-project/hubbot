@@ -24,6 +24,7 @@ Put something like this into $HOME/.hubbotrc:
     { 'github_token': "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
       'user_whitelist': [],
       'master_repo': "cockpit-project/cockpit",
+      'dry_run': False,
       'os_arch': [('fedora-22', 'f22', 'x86_64'),('rhel-7', 'r7', 'x86_64')]],
       'default': ('fedora-22', 'f22', 'x86_64'),
       'priority_default': 0,
@@ -32,6 +33,8 @@ Put something like this into $HOME/.hubbotrc:
       'priority_penalty_other_config': 1,
       'priority_penalty_master': 1
     }
+
+'dry_run' if this is true, no changes are pushed to github.
 
 'os_arch' entries consist of: (os name, short name, architecture)
 Of these, os name and architecture will be used to find the correct images,

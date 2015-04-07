@@ -32,6 +32,9 @@ master_repo = 'cockpit-project/cockpit'
 if 'master_repo' in config:
     master_repo = config['master_repo']
 
+if 'dry_run' in config:
+    dry_run = config['dry_run']
+
 priority_default = 0
 priority_needs_attention = 1
 priority_work_in_progress = 2
@@ -611,6 +614,10 @@ if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
 def print_usage():
     print "Usage: hubbot verify [ [REPO] PULL ]"
     print "       hubbot scan [REPO]"
+
+if dry_run:
+    print "hubbot dry run"
+
 
 if len(sys.argv) < 2:
     print_usage()
