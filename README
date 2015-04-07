@@ -25,12 +25,26 @@ Put something like this into $HOME/.hubbotrc:
       'user_whitelist': [],
       'master_repo': "cockpit-project/cockpit",
       'os_arch': [('fedora-22', 'f22', 'x86_64'),('rhel-7', 'r7', 'x86_64')]],
-      'default': ('fedora-22', 'f22', 'x86_64')
+      'default': ('fedora-22', 'f22', 'x86_64'),
+      'priority_default': 0,
+      'priority_needs_attention': 1,
+      'priority_work_in_progress': 2,
+      'priority_penalty_other_config': 1,
+      'priority_penalty_master': 1
     }
 
 'os_arch' entries consist of: (os name, short name, architecture)
 Of these, os name and architecture will be used to find the correct images,
 whereas the short name is used for status messages.
+
+Priorities:
+By default, all tasks are assigned priority_default.
+For pull requests, the github labels and title are considered:
+    priority_needs_attention (labels "needsdesign", "needswork")
+    priority_work_in_progress (title begins with WIP, case insensitive)
+When checking master, priority_penalty_master is added.
+When using a non-default configuration, priority_penalty_other_config is added.
+The penalties priority_penalty_master and priority_penalty_other_config stack.
 
 The github_token is used to access the GitHub API.  You can create one
 for your account at

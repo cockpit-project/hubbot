@@ -32,18 +32,38 @@ master_repo = 'cockpit-project/cockpit'
 if 'master_repo' in config:
     master_repo = config['master_repo']
 
-os_arch_configurations = []
-if 'os_arch' in config:
+priority_default = 0
+priority_needs_attention = 1
+priority_work_in_progress = 2
+
+# if something gets tested by a non-default configuration, add this to priority
+priority_penalty_other_config = 1
+
+# this is added to priority for checks on master, stacks with priority_penalty_other_config
+priority_penalty_master = 1
+
+if 'priority_default' in config:
+    priority_default = config['priority_default']
+if 'priority_needs_attention' in config:
+    priority_needs_attention = config['priority_needs_attention']
+if 'priority_work_in_progress' in config:
+    priority_work_in_progress = config['priority_work_in_progress']
+if 'priority_penalty_other_config' in config:
+    priority_penalty_other_config = config['priority_penalty_other_config']
+if 'priority_penalty_master' in config:
+    priority_penalty_master = config['priority_penalty_master']
+
+os_arch_configurations = [('fedora-22', 'f22', 'x86_64'), ('rhel-7', 'r7', 'x86_64')]
+if 'os_arch' in config and config['os_arch']:
     os_arch_configurations = config['os_arch']
 
-default_os = 'fedora-22'
-default_short = 'f22'
-default_arch = 'x86_64'
+default_arch_config = os_arch_configurations[0]
+default_os = default_arch_config[0]
+default_short = default_arch_config[1]
+default_arch = default_arch_config[2]
 
 if 'default' in config:
     (default_os, default_short, default_arch) = config['default']
-
-default_status_context = "hubbot/%s/%s" % (default_short, default_arch.replace('_', '-'))
 
 pull_status_skip = 'skip'
 pull_status_pending = 'pending'
@@ -52,6 +72,14 @@ pull_status_finished = 'finished'
 
 status_message_running = 'Hubbot is busy'
 status_message_master_changed = 'Hubbot was happy but will do this again because master has changed'
+
+def status_context_from_config(config):
+    if config is None:
+        config = default_arch_config
+    n_suffix = ""
+    if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
+        n_suffix = "/new"
+    return "hubbot/%s/%s%s" % (config[1], config[2].replace('_', '-'), n_suffix)
 
 def trace(msg):
     if verbose:
@@ -127,6 +155,12 @@ def git(*args):
 def git_output(*args):
     return cmd_output("git", *args)
 
+def github_get_authenticated(url):
+    return json.loads(subprocess.check_output ([ "curl", "-s",
+                                                 "-u", "%s:x-oauth-basic" % github_token,
+                                                 url,
+                                               ]))
+
 def github_get(url):
     return json.loads(subprocess.check_output ([ "curl", "-s",
                                                  "-u", "%s:x-oauth-basic" % github_token,
@@ -156,11 +190,14 @@ def add_comment(issue, message):
     else:
         print "+++ %s" % message
 
-def verify(head, status_context, clean=False):
-    pull_repo = head['repo']['full_name']
-    ref = head['ref']
-    sha = head['sha']
-    rebase_done = False
+def verify(head, status_context, is_master=False, clean=False):
+    if not is_master:
+        pull_repo = head['repo']['full_name']
+        ref = head['ref']
+        sha = head['sha']
+        rebase_done = False
+    else:
+        sha = head['commit']['sha']
     with WorkDir(sha) as wd:
         try:
             set_github_status(master_repo, sha, { "state": "pending" if not new_style else "success",
@@ -169,15 +206,20 @@ def verify(head, status_context, clean=False):
                                                   "context": status_context })
             if not dry_run:
                 git("init")
-                git("fetch", "https://github.com/%s.git" % pull_repo, ref)
-                branch = git_output("rev-parse", "FETCH_HEAD").strip()
-                git("checkout", "FETCH_HEAD")
+                if not is_master:
+                    git("fetch", "https://github.com/%s.git" % pull_repo, ref)
+                    branch = git_output("rev-parse", "FETCH_HEAD").strip()
+                    git("checkout", "FETCH_HEAD")
                 git("fetch", "https://github.com/%s.git" % master_repo, "master")
                 master = git_output("rev-parse", "FETCH_HEAD").strip()
                 with open("hubbot.master", "w") as master_file:
                     master_file.write("%s\n" % master)
-                git("rebase", "FETCH_HEAD")
-                rebase_done = True
+                # make sure we test exactly the specified revision, maybe someone pushed a new commit in the interim
+                if is_master:
+                    git("reset", sha)
+                else:
+                    git("rebase", "FETCH_HEAD")
+                    rebase_done = True
                 if new_style:
                     os.putenv("GUESTOS", "fedora22-cockpit")
                     os.putenv("GUEST_NUMBER", "22")
@@ -197,10 +239,13 @@ def verify(head, status_context, clean=False):
                                                   "context": status_context })
         except:
             traceback.print_exc()
-            if rebase_done:
+            if is_master:
                 description = "Hubbot is sad"
             else:
-                description = "Hubbot needs help with rebasing"
+                if rebase_done:
+                    description = "Hubbot is sad"
+                else:
+                    description = "Hubbot needs help with rebasing"
             set_github_status(master_repo, sha, { "state": "failure" if not new_style else "success",
                                                   "description": description,
                                                   "target_url": wd.url,
@@ -257,7 +302,12 @@ def consider_head(head, master, status_context):
                                                   "context": status_context })
     return (pull_status_pending, '')
 
-def print_jobs_table(title, jobs, status_context):
+def get_user_html(url):
+    user_info = github_get_authenticated(url)
+    return user_info['html_url']
+
+
+def print_jobs_table(title, jobs):
     if not jobs:
         return """
       <div class="container">
@@ -293,13 +343,47 @@ def print_jobs_table(title, jobs, status_context):
             job_class = 'success'
         elif job[3] == 'rejected user':
             job_class = 'warning'
-        p = job[0]
-        head = p['head']
-        job_desc = "<a href=\"%s\">%s</a>" % (p['html_url'], p['title'])
+        is_pull_request = job[4]
 
+        if is_pull_request:
+            p = job[0]
+            head = p['head']
+            job_desc = "<a href=\"%s\">%s</a>" % (p['html_url'], p['title'])
+            user_html = get_user_html(head['user']['url'])
+            if user_html:
+                user_login = "<a href=\"%s\">%s</a>" % (user_html, head['user']['login'])
+            else:
+                user_login = head['user']['login']
+            sha = head['sha']
+        else:
+            m = job[0]
+            if m['commit']:
+                c = m['commit']
+                if c['sha']:
+                    sha = m['commit']['sha']
+                if c['author'] and c['author']['login']:
+                    user_html = get_user_html(c['author']['url'])
+                    if user_html:
+                        user_login = "<a href=\"%s\">%s</a>" % (user_html, c['author']['login'])
+                    else:
+                        user_login = c['author']['login']
+                if c['committer'] and c['committer']['login']:
+                    user_html = get_user_html(c['committer']['url'])
+                    committer_login = c['committer']['login']
+                    if user_html:
+                        user_login += " (committed by <a href=\"%s\">%s</a>)" % (user_html, committer_login)
+                    else:
+                        user_login += " (committed by %s)" % (committer_login)
+                if m['_links'] and m['_links']['html']:
+                    job_desc = "<a href=\"%s\">master</a>" % (m['_links']['html'])
+                else:
+                    job_desc = 'master'
+            pass
+
+        status_context = job[5]
         comment = job[3]
         # get status, filtered by entries that concern us
-        status = github_get("commits/%s/status" % head['sha'])
+        status = github_get("commits/%s/status" % (sha))
         if status and status['statuses']:
             status = filter(lambda s: s['context'] == status_context and
                                       'hubbot' in "%s" % (s['target_url']),
@@ -320,7 +404,7 @@ def print_jobs_table(title, jobs, status_context):
             <td>%s</td>
             <td>%s</td>
             <td>%s</td>
-          </tr>""" % (job_class, job_desc, head['user']['login'], job[2], job[1], status_context, comment)
+          </tr>""" % (job_class, job_desc, user_login, job[2], job[1], status_context, comment)
     text = text + """
         </tbody>
       </table>
@@ -329,7 +413,7 @@ def print_jobs_table(title, jobs, status_context):
     return text
 
 # Publish scan info in html format
-def publish_status(extended_info, status_context):
+def publish_status(extended_info):
     header = """<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -368,9 +452,9 @@ def publish_status(extended_info, status_context):
 </html>
 """
     # print all elements in their respective category
-    tables = print_jobs_table('pending jobs', filter(lambda p: p[2] in [pull_status_pending, pull_status_running], extended_info), status_context)
-    tables += print_jobs_table('finished jobs', filter(lambda p: p[2] == pull_status_finished, extended_info), status_context)
-    tables += print_jobs_table('skipped jobs', filter(lambda p: p[2] == pull_status_skip, extended_info), status_context)
+    tables = print_jobs_table('pending jobs', filter(lambda p: p[2] in [pull_status_pending, pull_status_running], extended_info))
+    tables += print_jobs_table('finished jobs', filter(lambda p: p[2] == pull_status_finished, extended_info))
+    tables += print_jobs_table('skipped jobs', filter(lambda p: p[2] == pull_status_skip, extended_info))
 
     # write finished html file
     with open("%sindex.html" % (work), "w") as out_file:
@@ -378,59 +462,126 @@ def publish_status(extended_info, status_context):
 
 def get_sorted_pulls():
     pulls = github_get("pulls")
-    # Find pull, but prioritize:
-    #  2 Work in progress
-    #  1 needswork,needsdesign
-    #  0 default
     # Pulls with a lower priority will be checked first
     viable_pulls = [ ];
     for p in pulls:
-        priority = 0
+        priority = priority_default
         if p['title'].lower().startswith('wip'):
-            priority = 2
+            priority = priority_work_in_progress
         else:
             # check labels
             p_labels = github_get("issues/%s/labels" % p['number'])
             for l in p_labels:
                 if l['name'] in ['needswork', 'needsdesign']:
-                    priority = 1
+                    priority = priority_needs_attention
         viable_pulls.append((p, priority))
 
     # sort by priority
     return sorted(viable_pulls, key=lambda x: x[1])
 
+def consider_master(master, get_only=False):
+    master_sha = master['commit']['sha']
+    status = github_get("commits/%s/status" % (master_sha))
+
+    # consider all configurations
+    viable_checks = []
+    for config in os_arch_configurations:
+        status_context = status_context_from_config(config)
+        priority = priority_default + priority_penalty_master
+        if config != default_arch_config:
+            priority += priority_penalty_other_config
+        entry = (master, priority, pull_status_pending, '', False, status_context)
+        status_found = False
+        for s in status['statuses']:
+            if s['context'] == status_context:
+                status_found = True
+                if status_is_success(s):
+                    trace("master passed for config %s" % status_context)
+                    entry[2] = pull_status_finished
+                    entry[3] = 'passed'
+                elif s['state'] == 'error':
+                    trace("master needs verification (error) for config %s" % status_context)
+                    entry[2] = pull_status_pending
+                    entry[3] = 'error'
+                elif status_is_pending(s):
+                    trace("master needs verification (pending) for config %s" % status_context)
+                    if (s['description'] == status_message_running):
+                        entry[2] = pull_status_running
+                        entry[3] = ''
+                    else:
+                        # pending, no comment is default: no need to update entry
+                        pass
+                else:
+                    trace("master failed for config %s" % status_context)
+                    entry[2] = pull_status_finished
+                    entry[3] = 'failed'
+                # we found the newest status, don't check older ones
+                break
+
+        # if there was no status, then this is new and needs to be marked as pending
+        if not status_found and not get_only:
+            # pending, no comment is default: no need to update entry
+            trace("master needs verification for config %s" % status_context)
+            set_github_status(master_repo, master_sha, { "state": "pending" if not new_style else "success",
+                                                         "description": "Hubbot will get to this eventually",
+                                                         "context": status_context })
+        viable_checks.append(entry)
+
+
+    return sorted(viable_checks, key=lambda x: x[1])
+
 def scan_pulls(status_context):
     pulls = get_sorted_pulls()
-    master = github_get('branches/master')['commit']['sha']
+    master = github_get('branches/master')
+    master_sha = master['commit']['sha']
     extended_info = []
     for pull_info in pulls:
         p = pull_info[0]
         if p['head']['user']['login'] not in user_whitelist:
             trace("%s not in whitelist" % p['head']['user']['login'])
-            extended_info.append((p, pull_info[1], pull_status_skip, 'rejected user'))
+            extended_info.append((p, pull_info[1], pull_status_skip, 'rejected user', True, status_context))
             continue
-        (pull_status, pull_comment) = consider_head(p['head'], master, status_context)
-        extended_info.append((p, pull_info[1], pull_status, pull_comment))
-    publish_status(extended_info, status_context)
+        (pull_status, pull_comment) = consider_head(p['head'], master_sha, status_context)
+        extended_info.append((p, pull_info[1], pull_status, pull_comment, True, status_context))
+    master_info = consider_master(master)
+    if master_info:
+        extended_info.extend(master_info)
+    publish_status(extended_info)
 
-def head_is_pending(head):
+def head_is_pending(head, status_context):
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
         if s['context'] == status_context and status_is_pending(s):
             return True
     return False
 
-def verify_pull(pull, status_context):
+def verify_pull(pull):
     data = None
+    is_master_check = False
+    status_context = status_context_from_config(default_arch_config)
     if pull == "-":
         pulls = get_sorted_pulls()
-
         # use first pending pull in sorted list
         for pull_info in pulls:
             p = pull_info[0]
             if head_is_pending(p['head'], status_context):
                 data = p
+                priority = pull_info[1]
                 break
+
+        # consider checking master
+        master = github_get('branches/master')
+        master_sha = master['commit']['sha']
+        master_info = consider_master(master, True)
+        for info in master_info:
+            if info[2] != pull_status_pending:
+                continue
+            # we need to be of a higher priority than the pull request
+            if data is None or info[1] >= priority:
+                continue
+            data = info[0]
+            is_master_check = True
+            status_context = info[5]
 
         if data is None:
             trace("No verifications pending")
@@ -445,14 +596,17 @@ def verify_pull(pull, status_context):
     for l in labels:
         if l['name'] == "hubbot:makeimages":
             clean = True
-    trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
-    verify(data['head'], status_context, clean)
+    if is_master_check:
+        trace("Verifying master for config %s%s" % (status_context, " (cleanly)" if clean else ""))
+        verify(data, status_context, True, clean)
+    else:
+        trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
+        verify(data['head'], status_context, False, clean)
 
 if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
     new_style = True
     work = "%s/hubbot.new/" % os.environ['HOME']
     work_url = "http://files.cockpit-project.org/hubbot.new"
-    default_status_context = "hubbot/f22/x86_64/new"
 
 def print_usage():
     print "Usage: hubbot verify [ [REPO] PULL ]"
@@ -481,7 +635,7 @@ elif sys.argv[1] == 'scan' and len(sys.argv) <= 3:
 
     if not "/" in master_repo:
         master_repo = master_repo + "/cockpit"
-    scan_pulls(default_status_context)
+    scan_pulls(status_context_from_config(default_arch_config))
 
 else:
     print_usage()
