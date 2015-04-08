@@ -6,13 +6,40 @@ import os
 import sys
 import ast
 
+dry_run = False
+new_style = False
+
 config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
 github_token = config['github_token']
 user_whitelist = config['user_whitelist']
 
-new_style = False
-github_status_context = "hubbot/f22/x86-64"
+master_repo = 'cockpit-project/cockpit'
+if 'master_repo' in config:
+    master_repo = config['master_repo']
+
+if 'dry_run' in config:
+    dry_run = config['dry_run']
+
+os_arch_configurations = [('fedora-22', 'f22', 'x86_64'), ('rhel-7', 'r7', 'x86_64')]
+if 'os_arch' in config and config['os_arch']:
+    os_arch_configurations = config['os_arch']
+
+default_arch_config = os_arch_configurations[0]
+default_os = default_arch_config[0]
+default_short = default_arch_config[1]
+default_arch = default_arch_config[2]
+
+if 'default' in config:
+    (default_os, default_short, default_arch) = config['default']
+
+def status_context_from_config(config):
+    if config is None:
+        config = default_arch_config
+    n_suffix = ""
+    if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
+        n_suffix = "/new"
+    return "hubbot/%s/%s%s" % (config[1], config[2].replace('_', '-'), n_suffix)
 
 def trace(msg):
     print msg
@@ -24,55 +51,96 @@ def github_get(url):
 ]))
 
 def set_github_status(repo, sha, status):
-    subprocess.check_output ([ "curl", "-s",
-                               "-u", "%s:x-oauth-basic" % github_token,
-                               "https://api.github.com/repos/%s/statuses/%s" % (repo, sha),
-                               "-d", json.dumps(status)
-                           ])
+    if dry_run:
+        print "Status %s: %s %s" % (sha, status['state'], status['description'])
+    else:
+        subprocess.check_output ([ "curl", "-s",
+                                   "-u", "%s:x-oauth-basic" % github_token,
+                                   "https://api.github.com/repos/%s/statuses/%s" % (repo, sha),
+                                   "-d", json.dumps(status)
+                                 ])
 
-def trigger_pull(pull):
+def trigger_pull(pull, status_context):
     data = github_get("pulls/%s" % pull)
     sha = data['head']['sha']
     set_github_status(master_repo, sha, { "state": "pending" if not new_style else "success",
                                           "description": "Hubbot will get to this eventually",
-                                          "context": github_status_context })
+                                          "context": status_context })
 
-def consider_head(head):
+def trigger_master(status_context):
+    master = github_get('branches/master')
+    sha = master['commit']['sha']
+    set_github_status(master_repo, sha, { "state": "pending" if not new_style else "success",
+                                          "description": "Hubbot will get to this eventually",
+                                          "context": status_context })
+
+def consider_head(head, status_context):
     status = github_get("commits/%s/status" % head['sha'])
     for s in status['statuses']:
-        if s['context'] == github_status_context:
+        if s['context'] == status_context:
             if s['state'] == 'failure':
                 return True
     return False
 
-def scan_pulls():
+def scan_pulls(status_context):
     pulls = github_get("pulls")
     master = github_get('branches/master')['commit']['sha']
     for p in pulls:
         if p['head']['user']['login'] not in user_whitelist:
             trace("%s not in whitelist" % p['head']['user']['login'])
             continue
-        if consider_head(p['head']):
-            trigger_pull(str(p['number']))
+        if consider_head(p['head'], status_context):
+            trigger_pull(str(p['number']), status_context)
+
+def is_context(context):
+    for config in os_arch_configurations:
+        if status_context_from_config(config) == context:
+            return True
+    return False
+
+def verify_context(context):
+    if not is_context(context):
+        print "Unknown configuration: '%s'" % context
+        exit(1)
 
 if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
     new_style = True
-    github_status_context = "hubbot/f22/x86_64/new"
 
-if len(sys.argv) == 3:
+if dry_run:
+    print "hubbot dry run"
+
+status_context = status_context_from_config(default_arch_config)
+
+if len(sys.argv) == 4:
     master_repo = sys.argv[1]
+    status_context = sys.argv[2]
+    verify_context(status_context)
+    pull = sys.argv[3]
+elif len(sys.argv) == 3:
+    if is_context(sys.argv[1]):
+        status_context = sys.argv[1]
+    else:
+        master_repo = sys.argv[1]
     pull = sys.argv[2]
 elif len(sys.argv) == 2:
-    master_repo = "cockpit-project"
     pull = sys.argv[1]
 else:
-    print "Usage: trigger-hubbot [MASTER-REPO] PULL"
+    print "Usage: trigger-hubbot [MASTER-REPO] [CONFIG] PULL"
+    print "       PULL values:"
+    print "         failed Restart all pull requests with status 'failure'"
+    print "         master Check master"
+    print "         NUMBER number of the pull request (e.g. '2000')"
+    print "       CONFIG values:"
+    for config in os_arch_configurations:
+        print "         %s" % status_context_from_config(config)
     exit(1)
 
 if not "/" in master_repo:
-    master_repo = master_repo + "/cockpit"
+    master_repo += "/cockpit"
 
 if pull == "failed":
-    scan_pulls()
+    scan_pulls(status_context)
+elif pull == "master":
+    trigger_master(status_context)
 else:
-    trigger_pull(pull)
+    trigger_pull(pull, status_context)
