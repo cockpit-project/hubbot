@@ -95,6 +95,12 @@ status_message_master_changed = 'Hubbot was happy but will do this again because
 last_successful_master = { }
 last_master = { }
 
+# currently running jobs
+# running_jobs[0] = [config, is_master, sha, hubbot_link]
+# e.g. running_jobs[0] = ['hubbot/r7/x86-64', True, 'c89a9e1eb5611671258dbff950d463bd8e39cf99',
+#                         'http://files.cockpit-project.org/hubbot/c89a9e1eb5611671258dbff950d463bd8e39cf99/hubbot.html']
+running_jobs = [ ]
+
 # Cache for user html pages
 # user_pages[login] = url
 # e.g. user_pages['octocat'] = 'https://github.com/octocat/'
@@ -109,6 +115,7 @@ user_pages = { }
 def load_persistent():
     global last_successful_master
     global last_master
+    global running_jobs
     global user_pages
     data = None
     if os.path.isfile(stats_filename):
@@ -128,12 +135,15 @@ def load_persistent():
         last_successful_master = data['last_successful_master']
     if 'last_master' in data:
         last_master = data['last_master']
+    if 'running_jobs' in data:
+        running_jobs = data['running_jobs']
     if 'user_pages' in data:
         user_pages = data['user_pages']
 
 def store_persistent():
     data = { 'last_successful_master': last_successful_master,
              'last_master': last_master,
+             'running_jobs': running_jobs,
              'user_pages': user_pages
            }
     # no option for remote here since we can only store locally
@@ -272,6 +282,9 @@ def verify(head, status_context, is_master=False, clean=False):
         if 'committer' in head['commit']['commit'] and 'date' in head['commit']['commit']['committer']:
             commit_date = head['commit']['commit']['committer']['date']
     with WorkDir(sha) as wd:
+        run_entry = [status_context, is_master, sha, wd.url]
+        running_jobs.append(run_entry)
+        store_persistent()
         try:
             set_github_status(master_repo, sha, { "state": "pending" if not new_style else "success",
                                                   "description": status_message_running,
@@ -318,6 +331,8 @@ def verify(head, status_context, is_master=False, clean=False):
                                                   "target_url": wd.url,
                                                   "context": status_context })
             if is_master:
+                # reload from disk in case someone else wrote
+                load_persistent()
                 last_master[status_context] = [sha, 'finished', 'passed', commit_date]
                 last_successful_master[status_context] = last_master[status_context]
         except:
@@ -334,7 +349,12 @@ def verify(head, status_context, is_master=False, clean=False):
                                                   "target_url": wd.url,
                                                   "context": status_context })
             if is_master:
+                # reload from disk in case someone else wrote
+                load_persistent()
                 last_master[status_context] = [sha, 'finished', 'failed', commit_date]
+        # mark as not running
+        while run_entry in running_jobs:
+            running_jobs.remove(run_entry)
         store_persistent()
 
 def master_from_status(status):
