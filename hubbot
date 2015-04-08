@@ -618,15 +618,17 @@ def verify_pull(pull):
         data = github_get("pulls/%s" % pull)
 
     expire_work_dirs()
-    labels = github_get("issues/%s/labels" % data['number'])
     clean = False
-    for l in labels:
-        if l['name'] == "hubbot:makeimages":
-            clean = True
+
     if is_master_check:
         trace("Verifying master for config %s%s" % (status_context, " (cleanly)" if clean else ""))
         verify(data, status_context, True, clean)
     else:
+        labels = github_get("issues/%s/labels" % data['number'])
+        for l in labels:
+            if l['name'] == "hubbot:makeimages":
+                clean = True
+                break
         trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
         verify(data['head'], status_context, False, clean)
 
