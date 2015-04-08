@@ -241,7 +241,7 @@ def verify(head, status_context, is_master=False, clean=False):
                     for config in os_arch_configurations:
                         if status_context == status_context_from_config(config):
                             os.putenv("TEST_OS", config[0])
-                            os.putenv("TEST_ARCH", config[1])
+                            os.putenv("TEST_ARCH", config[2])
                             break
                     os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
                     os.putenv("TEST_JOBS", "4")
