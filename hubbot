@@ -218,16 +218,18 @@ def verify(head, status_context, is_master=False, clean=False):
                     git("fetch", "https://github.com/%s.git" % pull_repo, ref)
                     branch = git_output("rev-parse", "FETCH_HEAD").strip()
                     git("checkout", "FETCH_HEAD")
-                git("fetch", "https://github.com/%s.git" % master_repo, "master")
-                master = git_output("rev-parse", "FETCH_HEAD").strip()
-                with open("hubbot.master", "w") as master_file:
-                    master_file.write("%s\n" % master)
-                # make sure we test exactly the specified revision, maybe someone pushed a new commit in the interim
-                if is_master:
-                    git("reset", sha)
-                else:
+                    git("fetch", "https://github.com/%s.git" % master_repo, "master")
+                    master = git_output("rev-parse", "FETCH_HEAD").strip()
+                    with open("hubbot.master", "w") as master_file:
+                        master_file.write("%s\n" % master)
                     git("rebase", "FETCH_HEAD")
                     rebase_done = True
+                else:
+                    git("fetch", "https://github.com/%s.git" % master_repo, "master")
+                    git("checkout", "FETCH_HEAD")
+                    # make sure we test exactly the specified revision, maybe someone pushed a new commit in the interim
+                    git("reset", "--hard", sha)
+
                 if new_style:
                     os.putenv("GUESTOS", "fedora22-cockpit")
                     os.putenv("GUEST_NUMBER", "22")
@@ -502,7 +504,7 @@ def get_sorted_pulls():
             priority_offset = 0
             if config != default_arch_config:
                 priority_offset += priority_penalty_other_config
-            viable_pulls.append((p, priority+priority_offset, status_context))
+            viable_pulls.append([p, priority+priority_offset, status_context])
 
     # sort by priority
     return sorted(viable_pulls, key=lambda x: x[1])
@@ -518,7 +520,7 @@ def consider_master(master, get_only=False):
         priority = priority_default + priority_penalty_master
         if config != default_arch_config:
             priority += priority_penalty_other_config
-        entry = (master, priority, pull_status_pending, '', False, status_context)
+        entry = [master, priority, pull_status_pending, '', False, status_context]
         status_found = False
         for s in status['statuses']:
             if s['context'] == status_context:
