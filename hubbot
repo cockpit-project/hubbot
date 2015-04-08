@@ -30,6 +30,8 @@ stats_filename_remote = os.path.join(work_url, "hubbot.persistent")
 
 current_master_filename = os.path.join(work, "hubbot.current_master")
 
+status_images_path = os.path.join(work, "status-images")
+
 config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
 github_token = config['github_token']
@@ -148,13 +150,29 @@ def store_persistent():
              'running_jobs': running_jobs,
              'user_pages': user_pages
            }
-    # no option for remote here since we can only store locally
-    with open(stats_filename, "w") as stats_file:
-        stats_file.write(json.dumps(data))
+    if not dry_run:
+        # no option for remote here since we can only store locally
+        with open(stats_filename, "w") as stats_file:
+            stats_file.write(json.dumps(data))
 
 def store_current_master(sha):
     with open(current_master_filename, "w") as master_file:
         master_file.write(sha)
+
+def load_current_master():
+    if os.path.isfile(current_master_filename):
+        with open(current_master_filename, "r") as master_file:
+            return master_file.read().strip()
+    else:
+        if is_remote:
+            path = os.path.join(work_url, "hubbot.current_master")
+            sha = subprocess.check_output ([ "curl", "-s", path ]).strip()
+            if len(sha) > 40 or "404 Not Found" in sha:
+                return ""
+            else:
+                return sha
+        else:
+            return ""
 
 def status_context_from_config(config):
     if config is None:
@@ -163,6 +181,23 @@ def status_context_from_config(config):
     if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
         n_suffix = "/new"
     return "hubbot/%s/%s%s" % (config[1], config[2].replace('_', '-'), n_suffix)
+
+def status_image_from_config(config, status):
+    if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
+        return os.path.join(status_images_path, "%s-%s-new-%s.svg" % (config[1], config[2], status))
+    return os.path.join(status_images_path, "%s-%s-%s.svg" % (config[1], config[2], status))
+
+def status_filename_from_config(config):
+    if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
+        return os.path.join(work, "status-%s-%s-new.svg" % (config[1], config[2]))
+    return os.path.join(work, "status-%s-%s.svg" % (config[1], config[2]))
+
+def set_build_status(status_context, status):
+    for config in os_arch_configurations:
+        if status_context == status_context_from_config(config):
+            img_file = status_image_from_config(config, status)
+            status_file = status_filename_from_config(config)
+            cmd("ln", "-s", os.path.join("status-images", os.path.basename(img_file)), status_file)
 
 def trace(msg):
     if verbose:
@@ -296,6 +331,9 @@ def verify(head, status_context, is_master=False, clean=False):
                                                   "description": status_message_running,
                                                   "target_url": wd.url,
                                                   "context": status_context })
+            # update status after setting github status - this might help syncing with scan
+            if is_master:
+                set_build_status(status_context, 'running')
             if not dry_run:
                 git("init")
                 if not is_master:
@@ -341,6 +379,10 @@ def verify(head, status_context, is_master=False, clean=False):
                 load_persistent()
                 last_master[status_context] = [sha, 'finished', 'passed', commit_date]
                 last_successful_master[status_context] = last_master[status_context]
+                # only set build status if scan didn't detect a new master in the meantime
+                n_sha = load_current_master()
+                if n_sha and n_sha == sha:
+                    set_build_status(status_context, 'passed')
         except:
             traceback.print_exc()
             if is_master:
@@ -354,10 +396,13 @@ def verify(head, status_context, is_master=False, clean=False):
                                                   "description": description,
                                                   "target_url": wd.url,
                                                   "context": status_context })
-            if is_master:
+            if is_master and not dry_run:
                 # reload from disk in case someone else wrote
                 load_persistent()
                 last_master[status_context] = [sha, 'finished', 'failed', commit_date]
+                n_sha = load_current_master()
+                if n_sha and n_sha == sha:
+                    set_build_status(status_context, 'failed')
         # mark as not running
         while run_entry in running_jobs:
             running_jobs.remove(run_entry)
@@ -778,6 +823,7 @@ def consider_master(master, get_only=False):
             set_github_status(master_repo, master_sha, { "state": "pending" if not new_style else "success",
                                                          "description": "Hubbot will get to this eventually",
                                                          "context": status_context })
+            set_build_status(status_context, 'pending')
         viable_checks.append(entry)
 
 
@@ -788,7 +834,14 @@ def scan_pulls():
     master = github_get('branches/master')
     master_sha = master['commit']['sha']
     # since we are in scan mode, store current master
-    store_current_master(master_sha)
+    # only do this if verify hasn't touched master before we scanned
+    global last_master
+    global running_jobs
+    load_persistent()
+    count_running_on_master = len(filter(lambda r: r[2] == master_sha, running_jobs))
+    count_last_master_with_sha = len(filter(lambda j: j[0] == master_sha, last_master))
+    if count_running_on_master > 0 or count_last_master_with_sha > 0:
+        store_current_master(master_sha)
     pulls = get_sorted_pulls()
     extended_info = []
     for pull_info in pulls:
@@ -864,6 +917,33 @@ def verify_pull(pull):
         trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
         verify(data['head'], status_context, False, clean)
 
+def generate_status_images():
+    status_color_combos = { 'passed': 'brightgreen',
+                            'failed': 'red',
+                            'pending': 'yellow',
+                            'running': 'blue',
+                            'unknown': 'lightgrey'
+                          }
+    if not os.path.exists(status_images_path):
+        cmd("mkdir", "-p", status_images_path)
+    for config in os_arch_configurations:
+        for status in status_color_combos:
+            o_file = status_image_from_config(config, status)
+            # download if it doesn't exist
+            if not os.path.isfile(o_file):
+                src = "https://img.shields.io/badge/%s-%s-%s.svg" % (
+                    status_context_from_config(config).replace('/', '%2F').replace('-', '--').replace('_', '__'),
+                    status,
+                    status_color_combos[status]
+                    )
+                try:
+                    cmd("wget", "-t", "0", "-T", "5", "-O", o_file, "-q", src)
+                except:
+                    pass
+        # initialize to unknown if link doesn't exist
+        if not os.path.lexists(status_filename_from_config(config)):
+            set_build_status(status_context_from_config(config), 'unknown')
+
 if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
     new_style = True
     work = "%s/hubbot.new/" % os.environ['HOME']
@@ -876,6 +956,8 @@ def print_usage():
 if dry_run:
     print "hubbot dry run"
 
+# make sure we have status images
+generate_status_images()
 
 if len(sys.argv) < 2:
     print_usage()
