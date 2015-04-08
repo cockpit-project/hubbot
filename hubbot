@@ -25,6 +25,9 @@ keep_work_dirs = 30
 work = "%s/hubbot/" % os.environ['HOME']
 work_url = "http://files.cockpit-project.org/hubbot"
 
+stats_filename = os.path.join(work, "hubbot.persistent")
+stats_filename_remote = os.path.join(work_url, "hubbot.persistent")
+
 config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
 github_token = config['github_token']
@@ -81,6 +84,61 @@ pull_status_finished = 'finished'
 
 status_message_running = 'Hubbot is busy'
 status_message_master_changed = 'Hubbot was happy but will do this again because master has changed'
+
+#############################
+# These variables are loaded from and stored in persistent storage
+# It's triggered manually via load_persistent() and store_persistent()
+
+# master is stored via 'config' keys
+# last_successful_master[config] = [sha, status, comment, committed-timestamp] or None
+# e.g. last_successful_master['hubbot/r7/x86-64'] = ['c89a9e1eb5611671258dbff950d463bd8e39cf99', 'finished', 'success', '2015-04-01T16:00:49Z']
+last_successful_master = { }
+last_master = { }
+
+# Cache for user html pages
+# user_pages[login] = url
+# e.g. user_pages['octocat'] = 'https://github.com/octocat/'
+# Note that these are usually only updated during scanning, which in turn doesn't write persistent data
+user_pages = { }
+#############################
+
+# we don't use any locking here
+# stats might become confused when there is a partial file
+# but that will right itself during the next run
+# only verification hubbot writes to the file, and that is a singleton
+def load_persistent():
+    global last_successful_master
+    global last_master
+    global user_pages
+    data = None
+    if os.path.isfile(stats_filename):
+        with open(stats_filename, "r") as stats_file:
+            data = json.loads(stats_file.read())
+    elif is_remote:
+        data = subprocess.check_output ([ "curl", "-s", stats_filename_remote ])
+        if "404 Not Found" in data:
+            return
+        else:
+            data = json.loads(data)
+    else:
+        return
+    if data is None:
+        return
+    if 'last_successful_master' in data:
+        last_successful_master = data['last_successful_master']
+    if 'last_master' in data:
+        last_master = data['last_master']
+    if 'user_pages' in data:
+        user_pages = data['user_pages']
+
+def store_persistent():
+    data = { 'last_successful_master': last_successful_master,
+             'last_master': last_master,
+             'user_pages': user_pages
+           }
+    # no option for remote here since we can only store locally
+    with open(stats_filename, "w") as stats_file:
+        stats_file.write(json.dumps(data))
 
 def status_context_from_config(config):
     if config is None:
@@ -200,6 +258,8 @@ def add_comment(issue, message):
         print "+++ %s" % message
 
 def verify(head, status_context, is_master=False, clean=False):
+    global last_master
+    global last_successful_master
     if not is_master:
         pull_repo = head['repo']['full_name']
         ref = head['ref']
@@ -207,6 +267,10 @@ def verify(head, status_context, is_master=False, clean=False):
         rebase_done = False
     else:
         sha = head['commit']['sha']
+        load_persistent()
+        commit_date = ""
+        if 'committer' in head['commit']['commit'] and 'date' in head['commit']['commit']['committer']:
+            commit_date = head['commit']['commit']['committer']['date']
     with WorkDir(sha) as wd:
         try:
             set_github_status(master_repo, sha, { "state": "pending" if not new_style else "success",
@@ -253,6 +317,9 @@ def verify(head, status_context, is_master=False, clean=False):
                                                   "description": "Hubbot is happy",
                                                   "target_url": wd.url,
                                                   "context": status_context })
+            if is_master:
+                last_master[status_context] = [sha, 'finished', 'passed', commit_date]
+                last_successful_master[status_context] = last_master[status_context]
         except:
             traceback.print_exc()
             if is_master:
@@ -266,6 +333,9 @@ def verify(head, status_context, is_master=False, clean=False):
                                                   "description": description,
                                                   "target_url": wd.url,
                                                   "context": status_context })
+            if is_master:
+                last_master[status_context] = [sha, 'finished', 'failed', commit_date]
+        store_persistent()
 
 def master_from_status(status):
     path = "%s/%s/hubbot.master" % (work, os.path.basename(os.path.dirname(status['target_url'])))
@@ -330,8 +400,22 @@ def get_user_html(url):
     user_info = github_get_authenticated(url)
     return user_info['html_url']
 
+def determine_job_class(pull_status, comment):
+    if pull_status == pull_status_running:
+        return 'info'
+    elif pull_status == pull_status_finished:
+        if 'passed' in comment:
+            return 'success'
+        elif 'failed' in comment:
+            return 'danger'
+    elif pull_status == pull_status_pending and 'passed' in comment:
+        return 'success'
+    elif comment == 'rejected user':
+        return 'warning'
+    return ''
 
 def print_jobs_table(title, jobs):
+    global user_pages
     if not jobs:
         return """
       <div class="container">
@@ -357,29 +441,21 @@ def print_jobs_table(title, jobs):
         <tbody>
 """ % (title)
     for job in jobs:
-        job_class = ''
-        if job[2] == pull_status_running:
-            job_class = 'info'
-        elif job[2] == pull_status_finished:
-            if 'passed' in job[3]:
-                job_class = 'success'
-            elif 'failed' in job[3]:
-                job_class = 'danger'
-        elif job[2] == pull_status_pending and 'passed' in job[3]:
-            job_class = 'success'
-        elif job[3] == 'rejected user':
-            job_class = 'warning'
+        job_class = determine_job_class(job[2], job[3])
         is_pull_request = job[4]
 
         if is_pull_request:
             p = job[0]
             head = p['head']
             job_desc = "<a href=\"%s\">%s</a>" % (p['html_url'], p['title'])
-            user_html = get_user_html(head['user']['url'])
-            if user_html:
-                user_login = "<a href=\"%s\">%s</a>" % (user_html, head['user']['login'])
+            user_login = head['user']['login']
+            if user_login in user_pages:
+                user_html = user_pages[user_login]
             else:
-                user_login = head['user']['login']
+                user_html = get_user_html(head['user']['url'])
+                user_pages[user_login] = user_html
+            if user_html:
+                user_login = "<a href=\"%s\">%s</a>" % (user_html, user_login)
             sha = head['sha']
         else:
             m = job[0]
@@ -388,14 +464,21 @@ def print_jobs_table(title, jobs):
                 if c['sha']:
                     sha = m['commit']['sha']
                 if c['author'] and c['author']['login']:
-                    user_html = get_user_html(c['author']['url'])
+                    user_login = c['author']['login']
+                    if user_login in user_pages:
+                        user_html = user_pages[user_login]
+                    else:
+                        user_html = get_user_html(c['author']['url'])
                     if user_html:
-                        user_login = "<a href=\"%s\">%s</a>" % (user_html, c['author']['login'])
+                        user_login = "<a href=\"%s\">%s</a>" % (user_html, user_login)
                     else:
                         user_login = c['author']['login']
                 if c['committer'] and c['committer']['login']:
-                    user_html = get_user_html(c['committer']['url'])
                     committer_login = c['committer']['login']
+                    if committer_login in user_pages:
+                        user_html = user_pages[committer_login]
+                    else:
+                        user_html = get_user_html(c['committer']['url'])
                     if user_html:
                         user_login += " (committed by <a href=\"%s\">%s</a>)" % (user_html, committer_login)
                     else:
@@ -438,8 +521,108 @@ def print_jobs_table(title, jobs):
 """
     return text
 
+def print_master_details(extended_info):
+    master_jobs = filter(lambda p: not p[4], extended_info)
+    if not master_jobs:
+        return """
+    <div class="container">
+      <h2>master</h2>
+      <p>No information available.</p>
+    </div><!-- /.container -->
+"""
+    text = """
+    <div class="container">
+
+      <h2>master</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Configuration</th>
+            <th>Commit</th>
+            <th>Commit date</th>
+            <th>Status</th>
+            <th>Comment</th>
+          </tr>
+        </thead>
+        <tbody>
+"""
+    entries = []
+    for config in os_arch_configurations:
+        status_context = status_context_from_config(config)
+        # we always want info on current master
+        # if that is broken, we want info on last working
+        config_job = filter(lambda p: p[5] == status_context, master_jobs)
+        if len(config_job) < 1:
+            # some kind of error, we should always have a job info for master
+            entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'current master'))
+        else:
+            config_job = config_job[0]
+            job_sha = config_job[0]['commit']['sha']
+            job_class = determine_job_class(config_job[2], config_job[3])
+            commit_link = "<a href=\"%s\">%s</a>" % (
+                os.path.join("https://github.com", master_repo, "commit", job_sha),
+                job_sha
+                )
+            commit_date = ""
+            if 'committer' in config_job[0]['commit']['commit'] and 'date' in config_job[0]['commit']['commit']['committer']:
+                commit_date = config_job[0]['commit']['commit']['committer']['date']
+            commit_comment = "current master"
+            if config_job[3]:
+                commit_comment += ": " + config_job[3]
+            entries.append((job_class, status_context, commit_link, commit_date, config_job[2], commit_comment))
+
+            # if current master hasn't passed or is still pending, get info on the last checked master
+            if config_job[3] != "passed" or config_job[2] == pull_status_pending:
+                if not status_context in last_master or not last_master[status_context]:
+                    entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'last checked master'))
+                else:
+                    last_info = last_master[status_context]
+                    # print this job if it's not the same as head
+                    if last_info[0] != job_sha:
+                        job_class = determine_job_class(last_info[1], last_info[2])
+                        commit_link = "<a href=\"%s\">%s</a>" % (
+                            os.path.join("https://github.com", master_repo, "commit", last_info[0]),
+                            last_info[0]
+                            )
+                        commit_comment = "last checked master"
+                        if last_info[2]:
+                            commit_comment += ": " + last_info[2]
+                        entries.append((job_class, status_context, commit_link, last_info[3], last_info[1], commit_comment))
+                    # if last check wasn't successful, try to show last successful run
+                    if last_info[2] != "passed":
+                        if not status_context in last_successful_master or not last_successful_master[status_context]:
+                            entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'last successful master'))
+                        else:
+                            last_info = last_successful_master[status_context]
+                            job_class = determine_job_class(last_info[1], last_info[2])
+                            commit_link = "<a href=\"%s\">%s</a>" % (
+                                os.path.join("https://github.com", master_repo, "commit", last_info[0]),
+                                last_info[0]
+                                )
+                            commit_comment = "last successful master"
+                            if last_info[2]:
+                                commit_comment += ": " + last_info[2]
+                            entries.append((job_class, status_context, commit_link, last_info[3], last_info[1], commit_comment))
+
+    for entry in entries:
+        text = text + """
+          <tr class="%s">
+            <td>%s</td>
+            <td>%s</td>
+            <td>%s</td>
+            <td>%s</td>
+            <td>%s</td>
+          </tr>""" % entry
+
+    return text + """
+        </tbody>
+      </table>
+    </div><!-- /.container -->
+"""
+
 # Publish scan info in html format
 def publish_status(extended_info):
+    load_persistent()
     header = """<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -477,14 +660,27 @@ def publish_status(extended_info):
   </body>
 </html>
 """
+    # print infos we have on master
+    master_details = print_master_details(extended_info)
+
     # print all elements in their respective category
-    tables = print_jobs_table('pending jobs', filter(lambda p: p[2] in [pull_status_pending, pull_status_running], extended_info))
-    tables += print_jobs_table('finished jobs', filter(lambda p: p[2] == pull_status_finished, extended_info))
-    tables += print_jobs_table('skipped jobs', filter(lambda p: p[2] == pull_status_skip, extended_info))
+    tables = print_jobs_table('pending jobs',
+                              filter(lambda p: p[2] in [pull_status_pending, pull_status_running],
+                                     extended_info)
+                             )
+    # don't show master checks in finished/skipped jobs
+    tables += print_jobs_table('finished jobs',
+                               filter(lambda p: p[4] and p[2] == pull_status_finished,
+                                      extended_info)
+                              )
+    tables += print_jobs_table('skipped jobs',
+                               filter(lambda p: p[4] and p[2] == pull_status_skip,
+                                      extended_info)
+                              )
 
     # write finished html file
     with open("%sindex.html" % (work), "w") as out_file:
-        out_file.write(header + tables + footer)
+        out_file.write(header + master_details + tables + footer)
 
 def get_sorted_pulls():
     pulls = github_get("pulls")
