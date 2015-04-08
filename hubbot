@@ -235,6 +235,11 @@ def verify(head, status_context, is_master=False, clean=False):
                 else:
                     os.putenv("TEST_OS", default_os)
                     os.putenv("TEST_ARCH", default_arch)
+                    for config in os_arch_configurations:
+                        if status_context == status_context_from_config(config):
+                            os.putenv("TEST_OS", config[0])
+                            os.putenv("TEST_ARCH", config[1])
+                            break
                     os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
                     os.putenv("TEST_JOBS", "4")
                     if clean:
