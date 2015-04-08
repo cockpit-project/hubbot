@@ -28,6 +28,8 @@ work_url = "http://files.cockpit-project.org/hubbot"
 stats_filename = os.path.join(work, "hubbot.persistent")
 stats_filename_remote = os.path.join(work_url, "hubbot.persistent")
 
+current_master_filename = os.path.join(work, "hubbot.current_master")
+
 config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
 github_token = config['github_token']
@@ -150,6 +152,10 @@ def store_persistent():
     with open(stats_filename, "w") as stats_file:
         stats_file.write(json.dumps(data))
 
+def store_current_master(sha):
+    with open(current_master_filename, "w") as master_file:
+        master_file.write(sha)
+
 def status_context_from_config(config):
     if config is None:
         config = default_arch_config
@@ -270,6 +276,7 @@ def add_comment(issue, message):
 def verify(head, status_context, is_master=False, clean=False):
     global last_master
     global last_successful_master
+    load_persistent()
     if not is_master:
         pull_repo = head['repo']['full_name']
         ref = head['ref']
@@ -277,7 +284,6 @@ def verify(head, status_context, is_master=False, clean=False):
         rebase_done = False
     else:
         sha = head['commit']['sha']
-        load_persistent()
         commit_date = ""
         if 'committer' in head['commit']['commit'] and 'date' in head['commit']['commit']['committer']:
             commit_date = head['commit']['commit']['committer']['date']
@@ -594,7 +600,7 @@ def print_master_details(extended_info):
             # if current master hasn't passed or is still pending, get info on the last checked master
             if config_job[3] != "passed" or config_job[2] == pull_status_pending:
                 if not status_context in last_master or not last_master[status_context]:
-                    entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'last checked master'))
+                    entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'last successful master'))
                 else:
                     last_info = last_master[status_context]
                     # print this job if it's not the same as head
@@ -779,9 +785,11 @@ def consider_master(master, get_only=False):
     return sorted(viable_checks, key=lambda x: x[1])
 
 def scan_pulls():
-    pulls = get_sorted_pulls()
     master = github_get('branches/master')
     master_sha = master['commit']['sha']
+    # since we are in scan mode, store current master
+    store_current_master(master_sha)
+    pulls = get_sorted_pulls()
     extended_info = []
     for pull_info in pulls:
         p = pull_info[0]
