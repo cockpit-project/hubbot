@@ -26,7 +26,7 @@ Put something like this into $HOME/.hubbotrc:
       'master_repo': "cockpit-project/cockpit",
       'dry_run': False,
       'remote': False,
-      'os_arch': [('fedora-22', 'f22', 'x86_64'),('rhel-7', 'r7', 'x86_64')]],
+      'os_arch': [('fedora-22', 'f22', 'x86_64', 0, 0),('rhel-7', 'r7', 'x86_64', -1, 2)]],
       'default': ('fedora-22', 'f22', 'x86_64'),
       'priority_default': 0,
       'priority_needs_attention': 1,
@@ -40,9 +40,10 @@ Put something like this into $HOME/.hubbotrc:
 'remote' specifies if hubbot runs on a remote server. If True, the hubbot.work files
 will be looked for via http if they aren't found locally.
 
-'os_arch' entries consist of: (os name, short name, architecture)
+'os_arch' entries consist of: (os name, short name, architecture, offset_master, offset_pull)
 Of these, os name and architecture will be used to find the correct images,
 whereas the short name is used for status messages.
+'offset_master' and 'offset_pull' will be added to priorities with this configuration.
 
 Priorities:
 By default, all tasks are assigned priority_default.
