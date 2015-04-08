@@ -497,7 +497,7 @@ def get_sorted_pulls():
             priority_offset = 0
             if config != default_arch_config:
                 priority_offset += priority_penalty_other_config
-            viable_pulls.append((p, priority+priority_offset, status_context))
+            viable_pulls.append([p, priority+priority_offset, status_context])
 
     # sort by priority
     return sorted(viable_pulls, key=lambda x: x[1])
@@ -513,7 +513,7 @@ def consider_master(master, get_only=False):
         priority = priority_default + priority_penalty_master
         if config != default_arch_config:
             priority += priority_penalty_other_config
-        entry = (master, priority, pull_status_pending, '', False, status_context)
+        entry = [master, priority, pull_status_pending, '', False, status_context]
         status_found = False
         for s in status['statuses']:
             if s['context'] == status_context:
