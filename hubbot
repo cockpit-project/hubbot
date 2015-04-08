@@ -19,6 +19,8 @@ tail_log = False
 
 new_style = False
 
+is_remote = False
+
 keep_work_dirs = 30
 work = "%s/hubbot/" % os.environ['HOME']
 work_url = "http://files.cockpit-project.org/hubbot"
@@ -34,6 +36,9 @@ if 'master_repo' in config:
 
 if 'dry_run' in config:
     dry_run = config['dry_run']
+
+if 'remote' in config:
+    is_remote = config['remote']
 
 priority_default = 0
 priority_needs_attention = 1
@@ -260,7 +265,15 @@ def master_from_status(status):
         with open(path, "r") as master_file:
             return master_file.readline().strip()
     else:
-        return ""
+        if is_remote:
+            path = "%s/hubbot.master" % os.path.dirname(status['target_url'])
+            sha = subprocess.check_output ([ "curl", "-s", path ]).strip()
+            if len(sha) > 40 or "404 Not Found" in sha:
+                return ""
+            else:
+                return sha
+        else:
+            return ""
 
 def status_is_success(status):
     return status['state'] == 'success' and status['description'] == "Hubbot is happy"
