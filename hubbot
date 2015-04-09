@@ -72,7 +72,6 @@ if 'priority_penalty_other_config' in config:
 if 'priority_penalty_master' in config:
     priority_penalty_master = config['priority_penalty_master']
 
-# (os name, short name, architecture, offset_master, offset_pull)
 os_arch_configurations = [{'os': 'fedora-22',
                            'short': 'f22',
                            'arch': 'x86_64',
@@ -125,7 +124,7 @@ last_master = { }
 
 """
 currently running jobs
- running_jobs[0] = ['config', 'is_master', 'sha', 'hubbot_link']
+ running_job should contain ['config', 'is_master', 'sha', 'hubbot_link']
  e.g. running_jobs[0] = {
         'config': 'hubbot/r7/x86-64',
         'is_master': True,
@@ -152,39 +151,55 @@ def load_persistent():
     global last_master
     global running_jobs
     global user_pages
+    last_successful_master = {}
+    last_master = {}
+    running_jobs = []
+    user_pages = {}
     data = None
     if os.path.isfile(stats_filename):
         with open(stats_filename, "r") as stats_file:
-            data = json.loads(stats_file.read())
+            try:
+                data = json.loads(stats_file.read())
+            except:
+                data = None
     elif is_remote:
         data = subprocess.check_output ([ "curl", "-s", stats_filename_remote ])
         if "404 Not Found" in data:
             return
         else:
-            data = json.loads(data)
+            try:
+                data = json.loads(data)
+            except:
+                data = None
     else:
         return
     if data is None:
         return
+    trace("loaded persistent data: %s" % data)
     if 'last_successful_master' in data:
-        last_successful_master = data['last_successful_master']
+        last_successful_master = {k: v for k, v in data['last_successful_master'].iteritems() if type(v) is dict}
     if 'last_master' in data:
-        last_master = data['last_master']
+        last_master = {k: v for k, v in data['last_master'].iteritems() if type(v) is dict}
     if 'running_jobs' in data:
-        running_jobs = data['running_jobs']
+        running_jobs = filter(lambda e: type(e) is dict, data['running_jobs'])
     if 'user_pages' in data:
         user_pages = data['user_pages']
 
 def store_persistent():
-    data = { 'last_successful_master': last_successful_master,
+    global last_successful_master
+    global last_master
+    global running_jobs
+    global user_pages
+    data = json.dumps({ 'last_successful_master': last_successful_master,
              'last_master': last_master,
              'running_jobs': running_jobs,
              'user_pages': user_pages
-           }
+           })
+    trace("writing persistent data: %s" % data)
     if not dry_run:
         # no option for remote here since we can only store locally
         with open(stats_filename, "w") as stats_file:
-            stats_file.write(json.dumps(data))
+            stats_file.write(data)
 
 def store_current_master(sha):
     with open(current_master_filename, "w") as master_file:
@@ -214,7 +229,7 @@ def load_current_master():
                     # if we don't get a good time from the server, consider the info to be current
                     return (sha, datetime.datetime.utcnow())
         else:
-            return ""
+            return ("", datetime.datetime.utcnow())
 
 def status_context_from_config(config):
     if config is None:
@@ -268,33 +283,35 @@ class WorkDir(object):
 
     def __enter__(self):
         trace("Entering %s" % self.path)
-        self.oldcwd = os.getcwd()
-        os.chdir(self.path)
-        self.log = subprocess.Popen("hublog2html >hubbot.html", stdin=subprocess.PIPE, shell=True, bufsize=0)
-        if tail_log:
-            self.tail = subprocess.Popen([ "tail", "-f", "hubbot.log" ])
-        else:
-            self.tail = None
-        self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
-        self.old_stdout.flush(); self.old_stderr.flush()
-        sys.stdout = self.log.stdin
-        sys.stderr = self.log.stdin
+        if not dry_run:
+            self.oldcwd = os.getcwd()
+            os.chdir(self.path)
+            self.log = subprocess.Popen("hublog2html >hubbot.html", stdin=subprocess.PIPE, shell=True, bufsize=0)
+            if tail_log:
+                self.tail = subprocess.Popen([ "tail", "-f", "hubbot.log" ])
+            else:
+                self.tail = None
+            self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
+            self.old_stdout.flush(); self.old_stderr.flush()
+            sys.stdout = self.log.stdin
+            sys.stderr = self.log.stdin
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        sys.stdout = self.old_stdout
-        sys.stderr = self.old_stderr
-        self.log.stdin.close()
-        self.log.wait()
-        if self.tail:
-            self.tail.kill()
-            self.tail.wait()
+        if not dry_run:
+            sys.stdout = self.old_stdout
+            sys.stderr = self.old_stderr
+            self.log.stdin.close()
+            self.log.wait()
+            if self.tail:
+                self.tail.kill()
+                self.tail.wait()
         trace("Leaving %s" % self.path)
 
 def expire_work_dirs():
     dirs = sorted (map (lambda e: (os.stat(e).st_mtime,e),
                         map (lambda e: os.path.join(work,e),
-                             filter (lambda e: e != "data",
+                             filter (lambda e: e not in ["data", "status-images"] and os.path.isdir(os.path.join(work,e)),
                                      os.listdir(work)))),
                    lambda x,y: cmp(x[0],y[0]))
     if len(dirs) > keep_work_dirs:
@@ -351,10 +368,6 @@ def add_comment(issue, message):
         print "+++ %s" % message
 
 def verify(head, status_context, is_master=False, clean=False):
-    global last_master
-    global last_successful_master
-    global timestamp_master_fetched
-    load_persistent()
     if not is_master:
         pull_repo = head['repo']['full_name']
         ref = head['ref']
@@ -366,6 +379,11 @@ def verify(head, status_context, is_master=False, clean=False):
         if 'committer' in head['commit']['commit'] and 'date' in head['commit']['commit']['committer']:
             commit_date = head['commit']['commit']['committer']['date']
     with WorkDir(sha) as wd:
+        load_persistent()
+        global last_master
+        global last_successful_master
+        global running_jobs
+        global timestamp_master_fetched
         run_entry = {
                       'config': status_context,
                       'is_master': is_master,
@@ -425,13 +443,12 @@ def verify(head, status_context, is_master=False, clean=False):
             if is_master:
                 # reload from disk in case someone else wrote
                 load_persistent()
-                last_master[status_context] = {
-                        'sha': sha,
-                        'status': 'finished',
-                        'comment': 'passed',
-                        'committed-timestamp': commit_date,
-                        'hubbot_link': wd.url
-                    }
+                last_master[status_context] = { 'sha': sha,
+                                                'status': 'finished',
+                                                'comment': 'passed',
+                                                'committed-timestamp': commit_date,
+                                                'hubbot_link': wd.url
+                                              }
                 last_successful_master[status_context] = last_master[status_context]
                 # only set build status if scan didn't detect a new master in the meantime
                 # unless info in the file is outdated
@@ -456,18 +473,19 @@ def verify(head, status_context, is_master=False, clean=False):
             if is_master and not dry_run:
                 # reload from disk in case someone else wrote
                 load_persistent()
-                last_master[status_context] = {
-                        'sha': sha,
-                        'status': 'finished',
-                        'comment': 'failed',
-                        'committed-timestamp': commit_date,
-                        'hubbot_link': wd.url
-                    }
+                last_master[status_context] = { 'sha': sha,
+                                                'status': 'finished',
+                                                'comment': 'failed',
+                                                'committed-timestamp': commit_date,
+                                                'hubbot_link': wd.url
+                                              }
                 (n_sha, modified) = load_current_master()
                 info_is_current = modified and (modified < timestamp_master_fetched)
                 sha_in_file_matches = n_sha and (n_sha == sha)
                 if (info_is_current and sha_in_file_matches) or not info_is_current:
                     set_build_status(status_context, 'failed')
+        if not is_master:
+            load_persistent()
         # mark as not running
         while run_entry in running_jobs:
             running_jobs.remove(run_entry)
@@ -1013,9 +1031,10 @@ def verify_pull(pull):
             if info['pull_status'] != pull_status_pending:
                 continue
             # we need to be of a higher priority than the pull request
-            if data is None or info['priority'] >= priority:
+            if info['data'] is None or info['priority'] >= priority:
                 continue
             data = info['data']
+            priority = info['priority']
             is_master_check = True
             status_context = info['config']
 
@@ -1092,7 +1111,7 @@ elif sys.argv[1] == 'verify' and len(sys.argv) <= 4:
         master_repo = sys.argv[2]
         pull = sys.argv[3]
     elif len(sys.argv) == 3:
-        pull = sys.argv[3]
+        pull = sys.argv[2]
     else:
         pull = "-"
 
