@@ -938,14 +938,14 @@ def verify_pull(pull):
         master_sha = master['commit']['sha']
         master_info = consider_master(master, True)
         for info in master_info:
-            if info[2] != pull_status_pending:
+            if info['pull_status'] != pull_status_pending:
                 continue
             # we need to be of a higher priority than the pull request
-            if data is None or info[1] >= priority:
+            if data is None or info['priority'] >= priority:
                 continue
-            data = info[0]
+            data = info['data']
             is_master_check = True
-            status_context = info[5]
+            status_context = info['config']
 
         if data is None:
             trace("No verifications pending")
