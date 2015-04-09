@@ -239,7 +239,7 @@ def set_build_status(status_context, status):
         if status_context == status_context_from_config(config):
             img_file = status_image_from_config(config, status)
             status_file = status_filename_from_config(config)
-            cmd("ln", "-s", os.path.join("status-images", os.path.basename(img_file)), status_file)
+            cmd("ln", "-f", "-s", os.path.join("status-images", os.path.basename(img_file)), status_file)
 
 def trace(msg):
     if verbose:
