@@ -20,7 +20,7 @@ function style() {
 }
 
 function linkimages() {
-    sed -u -e "s,\([a-zA-Z0-9-]*\)<span style=\"color:red\">FAIL</span>.png,<a href=\"test/\1FAIL.png\">\1FAIL.png</a>,g"
+    sed -u -e "s,\\([a-zA-Z0-9-]*\\)FAIL.png,<a href=\"test/\\1FAIL.png\">\\1FAIL.png</a>,g"
 }
 
-txt2html | wrap "$HEAD" "$FOOT" | linkify "$HOME/avocado/" "$HOME/avocado/" | style PASS color:green | style FAIL color:red | linkimages
+txt2html | wrap "$HEAD" "$FOOT" | linkify "$HOME/avocado/" "$HOME/avocado/" | style PASS color:green | style FAILED color:red | linkimages
