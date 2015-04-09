@@ -939,11 +939,11 @@ def scan_pulls():
     global running_jobs
     load_persistent()
     if running_jobs:
-        count_running_on_master = len(filter(lambda r: r['sha'] == master_sha, running_jobs))
+        count_running_on_master = len(filter(lambda r: 'sha' in r and r['sha'] == master_sha, running_jobs))
     else:
         count_running_on_master = 0
     if last_master:
-        count_last_master_with_sha = len(filter(lambda j: j['sha'] == master_sha, last_master))
+        count_last_master_with_sha = len(filter(lambda j: 'sha' in j and j['sha'] == master_sha, last_master))
     else:
         count_last_master_with_sha = 0
     if count_running_on_master > 0 or count_last_master_with_sha > 0:
