@@ -73,17 +73,28 @@ if 'priority_penalty_master' in config:
     priority_penalty_master = config['priority_penalty_master']
 
 # (os name, short name, architecture, offset_master, offset_pull)
-os_arch_configurations = [('fedora-22', 'f22', 'x86_64', 0, 0),('rhel-7', 'r7', 'x86_64', -1, 2)]
+os_arch_configurations = [{'os': 'fedora-22',
+                           'short': 'f22',
+                           'arch': 'x86_64',
+                           'offset_master': 0,
+                           'offset_pull': 0
+                          },
+                          {'os': 'rhel-7',
+                           'short': 'r7',
+                           'arch': 'x86_64',
+                           'offset_master': -1,
+                           'offset_pull': 2
+                          }
+                         ]
+default_arch_config = os_arch_configurations[0]
 if 'os_arch' in config and config['os_arch']:
     os_arch_configurations = config['os_arch']
+    if os_arch_configurations and len(os_arch_configurations) > 0:
+        default_arch_config = os_arch_configurations[0]
 
-default_arch_config = os_arch_configurations[0]
-default_os = default_arch_config[0]
-default_short = default_arch_config[1]
-default_arch = default_arch_config[2]
-
-if 'default' in config:
-    (default_os, default_short, default_arch) = config['default']
+default_os = default_arch_config['os']
+default_short = default_arch_config['short']
+default_arch = default_arch_config['arch']
 
 pull_status_skip = 'skip'
 pull_status_pending = 'pending'
@@ -93,28 +104,44 @@ pull_status_finished = 'finished'
 status_message_running = 'Hubbot is busy'
 status_message_master_changed = 'Hubbot was happy but will do this again because master has changed'
 
-#############################
-# These variables are loaded from and stored in persistent storage
-# It's triggered manually via load_persistent() and store_persistent()
+"""
+ These variables are loaded from and stored in persistent storage
+ It's triggered manually via load_persistent() and store_persistent()
+"""
 
-# master is stored via 'config' keys
-# last_successful_master[config] = [sha, status, comment, committed-timestamp] or None
-# e.g. last_successful_master['hubbot/r7/x86-64'] = ['c89a9e1eb5611671258dbff950d463bd8e39cf99', 'finished', 'success', '2015-04-01T16:00:49Z']
+"""
+master is stored via 'config' keys
+  last_successful_master[config] should contain ['sha', 'status', 'comment', 'committed-timestamp', 'hubbot_link'] or None
+e.g. last_successful_master['hubbot/r7/x86-64'] = {
+        'sha': 'c89a9e1eb5611671258dbff950d463bd8e39cf99',
+        'status': 'finished',
+        'comment': 'passed',
+        'committed-timestamp': '2015-04-01T16:00:49Z',
+        'hubbot_link': 'http://files.cockpit-project.org/hubbot/c89a9e1eb5611671258dbff950d463bd8e39cf99/hubbot.html'
+    }
+"""
 last_successful_master = { }
 last_master = { }
 
-# currently running jobs
-# running_jobs[0] = [config, is_master, sha, hubbot_link]
-# e.g. running_jobs[0] = ['hubbot/r7/x86-64', True, 'c89a9e1eb5611671258dbff950d463bd8e39cf99',
-#                         'http://files.cockpit-project.org/hubbot/c89a9e1eb5611671258dbff950d463bd8e39cf99/hubbot.html']
+"""
+currently running jobs
+ running_jobs[0] = ['config', 'is_master', 'sha', 'hubbot_link']
+ e.g. running_jobs[0] = {
+        'config': 'hubbot/r7/x86-64',
+        'is_master': True,
+        'sha': 'c89a9e1eb5611671258dbff950d463bd8e39cf99',
+        'hubbot_link': 'http://files.cockpit-project.org/hubbot/c89a9e1eb5611671258dbff950d463bd8e39cf99/hubbot.html'
+    }
+"""
 running_jobs = [ ]
 
-# Cache for user html pages
-# user_pages[login] = url
-# e.g. user_pages['octocat'] = 'https://github.com/octocat/'
-# Note that these are usually only updated during scanning, which in turn doesn't write persistent data
+"""
+Cache for user html pages
+ user_pages[login] = url
+ e.g. user_pages['octocat'] = 'https://github.com/octocat/'
+ Note that these are usually only updated during scanning, which in turn doesn't write persistent data
+"""
 user_pages = { }
-#############################
 
 # we don't use any locking here
 # stats might become confused when there is a partial file
@@ -195,17 +222,17 @@ def status_context_from_config(config):
     n_suffix = ""
     if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
         n_suffix = "/new"
-    return "hubbot/%s/%s%s" % (config[1], config[2].replace('_', '-'), n_suffix)
+    return "hubbot/%s/%s%s" % (config['short'], config['arch'].replace('_', '-'), n_suffix)
 
 def status_image_from_config(config, status):
     if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
-        return os.path.join(status_images_path, "%s-%s-new-%s.svg" % (config[1], config[2], status))
-    return os.path.join(status_images_path, "%s-%s-%s.svg" % (config[1], config[2], status))
+        return os.path.join(status_images_path, "%s-%s-new-%s.svg" % (config['short'], config['arch'], status))
+    return os.path.join(status_images_path, "%s-%s-%s.svg" % (config['short'], config['arch'], status))
 
 def status_filename_from_config(config):
     if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
-        return os.path.join(work, "status-%s-%s-new.svg" % (config[1], config[2]))
-    return os.path.join(work, "status-%s-%s.svg" % (config[1], config[2]))
+        return os.path.join(work, "status-%s-%s-new.svg" % (config['short'], config['arch']))
+    return os.path.join(work, "status-%s-%s.svg" % (config['short'], config['arch']))
 
 def set_build_status(status_context, status):
     for config in os_arch_configurations:
@@ -339,7 +366,12 @@ def verify(head, status_context, is_master=False, clean=False):
         if 'committer' in head['commit']['commit'] and 'date' in head['commit']['commit']['committer']:
             commit_date = head['commit']['commit']['committer']['date']
     with WorkDir(sha) as wd:
-        run_entry = [status_context, is_master, sha, wd.url]
+        run_entry = {
+                      'config': status_context,
+                      'is_master': is_master,
+                      'sha': sha,
+                      'hubbot_link': wd.url
+                    }
         running_jobs.append(run_entry)
         store_persistent()
         try:
@@ -377,8 +409,8 @@ def verify(head, status_context, is_master=False, clean=False):
                     os.putenv("TEST_ARCH", default_arch)
                     for config in os_arch_configurations:
                         if status_context == status_context_from_config(config):
-                            os.putenv("TEST_OS", config[0])
-                            os.putenv("TEST_ARCH", config[2])
+                            os.putenv("TEST_OS", config['os'])
+                            os.putenv("TEST_ARCH", config['arch'])
                             break
                     os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
                     os.putenv("TEST_JOBS", "4")
@@ -674,31 +706,31 @@ def print_master_details(extended_info):
                 else:
                     last_info = last_master[status_context]
                     # print this job if it's not the same as head
-                    if last_info[0] != job_sha:
-                        job_class = determine_job_class(last_info[1], last_info[2])
+                    if last_info['sha'] != job_sha:
+                        job_class = determine_job_class(last_info['status'], last_info['comment'])
                         commit_link = "<a href=\"%s\">%s</a>" % (
-                            os.path.join("https://github.com", master_repo, "commit", last_info[0]),
-                            last_info[0]
+                            os.path.join("https://github.com", master_repo, "commit", last_info['sha']),
+                            last_info['sha']
                             )
                         commit_comment = "last checked master"
-                        if last_info[2]:
-                            commit_comment += ": " + last_info[2]
-                        entries.append((job_class, status_context, commit_link, last_info[3], last_info[1], commit_comment))
+                        if last_info['comment']:
+                            commit_comment += ": " + last_info['comment']
+                        entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
                     # if last check wasn't successful, try to show last successful run
-                    if last_info[2] != "passed":
+                    if last_info['comment'] != "passed":
                         if not status_context in last_successful_master or not last_successful_master[status_context]:
                             entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'last successful master'))
                         else:
                             last_info = last_successful_master[status_context]
-                            job_class = determine_job_class(last_info[1], last_info[2])
+                            job_class = determine_job_class(last_info['status'], last_info['comment'])
                             commit_link = "<a href=\"%s\">%s</a>" % (
-                                os.path.join("https://github.com", master_repo, "commit", last_info[0]),
-                                last_info[0]
+                                os.path.join("https://github.com", master_repo, "commit", last_info['sha']),
+                                last_info['sha']
                                 )
                             commit_comment = "last successful master"
-                            if last_info[2]:
-                                commit_comment += ": " + last_info[2]
-                            entries.append((job_class, status_context, commit_link, last_info[3], last_info[1], commit_comment))
+                            if last_info['comment']:
+                                commit_comment += ": " + last_info['comment']
+                            entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
 
     for entry in entries:
         text = text + """
@@ -794,13 +826,16 @@ def get_sorted_pulls():
                     priority = priority_needs_attention
         for config in os_arch_configurations:
             status_context = status_context_from_config(config)
-            priority_offset = config[4]
+            priority_offset = config['offset_pull']
             if config != default_arch_config:
                 priority_offset += priority_penalty_other_config
-            viable_pulls.append([p, priority+priority_offset, status_context])
+            viable_pulls.append({'data': p,
+                                 'priority': priority+priority_offset,
+                                 'config': status_context
+                                })
 
     # sort by priority
-    return sorted(viable_pulls, key=lambda x: x[1])
+    return sorted(viable_pulls, key=lambda x: x['priority'])
 
 def consider_master(master, get_only=False):
     master_sha = master['commit']['sha']
@@ -810,7 +845,7 @@ def consider_master(master, get_only=False):
     viable_checks = []
     for config in os_arch_configurations:
         status_context = status_context_from_config(config)
-        priority = config[3] + priority_default + priority_penalty_master
+        priority = config['offset_master'] + priority_default + priority_penalty_master
         if config != default_arch_config:
             priority += priority_penalty_other_config
         entry = {'data': master,
@@ -872,32 +907,38 @@ def scan_pulls():
     global last_master
     global running_jobs
     load_persistent()
-    count_running_on_master = len(filter(lambda r: r[2] == master_sha, running_jobs))
-    count_last_master_with_sha = len(filter(lambda j: j[0] == master_sha, last_master))
+    if running_jobs:
+        count_running_on_master = len(filter(lambda r: r['sha'] == master_sha, running_jobs))
+    else:
+        count_running_on_master = 0
+    if last_master:
+        count_last_master_with_sha = len(filter(lambda j: j['sha'] == master_sha, last_master))
+    else:
+        count_last_master_with_sha = 0
     if count_running_on_master > 0 or count_last_master_with_sha > 0:
         store_current_master(master_sha)
     pulls = get_sorted_pulls()
     extended_info = []
     for pull_info in pulls:
-        p = pull_info[0]
+        p = pull_info['data']
         if p['head']['user']['login'] not in user_whitelist:
             trace("%s not in whitelist" % p['head']['user']['login'])
             extended_info.append({'data': p,
-                                  'priority': pull_info[1],
+                                  'priority': pull_info['priority'],
                                   'pull_status': pull_status_skip,
                                   'comment': 'rejected user',
                                   'is_pull': True,
-                                  'config': pull_info[2],
+                                  'config': pull_info['config'],
                                   'status_data': github_get("commits/%s/status" % p['head']['sha'])
                                  })
             continue
-        (pull_status, pull_comment, status_data) = consider_head(p['head'], master_sha, pull_info[2])
+        (pull_status, pull_comment, status_data) = consider_head(p['head'], master_sha, pull_info['config'])
         extended_info.append({'data': p,
-                              'priority': pull_info[1],
+                              'priority': pull_info['priority'],
                               'pull_status': pull_status,
                               'comment': pull_comment,
                               'is_pull': True,
-                              'config': pull_info[2],
+                              'config': pull_info['config'],
                               'status_data': status_data
                              })
     master_info = consider_master(master)
@@ -925,11 +966,11 @@ def verify_pull(pull):
         pulls = get_sorted_pulls()
         # use first pending pull in sorted list
         for pull_info in pulls:
-            p = pull_info[0]
-            if head_is_pending(p['head'], pull_info[2]):
+            p = pull_info['data']
+            if head_is_pending(p['head'], pull_info['config']):
                 data = p
-                priority = pull_info[1]
-                status_context = pull_info[2]
+                priority = pull_info['priority']
+                status_context = pull_info['config']
                 break
 
         # consider checking master
