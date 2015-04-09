@@ -12,9 +12,10 @@ import ast
 import pprint
 import time
 import datetime
+import dateutil.parser
 
 dry_run = False
-verbose = False
+verbose = True
 tail_log = False
 
 new_style = False
@@ -29,6 +30,9 @@ stats_filename = os.path.join(work, "hubbot.persistent")
 stats_filename_remote = os.path.join(work_url, "hubbot.persistent")
 
 current_master_filename = os.path.join(work, "hubbot.current_master")
+
+# store when we pulled master info (sha)
+timestamp_master_fetched = None
 
 status_images_path = os.path.join(work, "status-images")
 
@@ -162,15 +166,26 @@ def store_current_master(sha):
 def load_current_master():
     if os.path.isfile(current_master_filename):
         with open(current_master_filename, "r") as master_file:
-            return master_file.read().strip()
+            dt = datetime.datetime.utcfromtimestamp(os.path.getmtime(current_master_filename))
+            return (master_file.read().strip(), dt)
     else:
         if is_remote:
             path = os.path.join(work_url, "hubbot.current_master")
             sha = subprocess.check_output ([ "curl", "-s", path ]).strip()
             if len(sha) > 40 or "404 Not Found" in sha:
-                return ""
+                return ("", None)
             else:
-                return sha
+                # get timestamp
+                try:
+                    dt = subprocess.check_output (["curl", "-s", "-v", "-X", "HEAD", path, "2>&1",
+                                                   "|", "grep",  "'^< Last-Modified:'",
+                                                   "|", "cut", "-c", "18-"
+                                                  ])
+                    dt = datetime.datetime.utcfromtimestamp(dateutil.parser.parse(dt))
+                    return (sha, dt)
+                except:
+                    # if we don't get a good time from the server, consider the info to be current
+                    return (sha, datetime.datetime.utcnow())
         else:
             return ""
 
@@ -311,6 +326,7 @@ def add_comment(issue, message):
 def verify(head, status_context, is_master=False, clean=False):
     global last_master
     global last_successful_master
+    global timestamp_master_fetched
     load_persistent()
     if not is_master:
         pull_repo = head['repo']['full_name']
@@ -380,8 +396,11 @@ def verify(head, status_context, is_master=False, clean=False):
                 last_master[status_context] = [sha, 'finished', 'passed', commit_date]
                 last_successful_master[status_context] = last_master[status_context]
                 # only set build status if scan didn't detect a new master in the meantime
-                n_sha = load_current_master()
-                if n_sha and n_sha == sha:
+                # unless info in the file is outdated
+                (n_sha, modified) = load_current_master()
+                info_is_current = modified and (modified < timestamp_master_fetched)
+                sha_in_file_matches = n_sha and (n_sha == sha)
+                if (info_is_current and sha_in_file_matches) or not info_is_current:
                     set_build_status(status_context, 'passed')
         except:
             traceback.print_exc()
@@ -400,8 +419,10 @@ def verify(head, status_context, is_master=False, clean=False):
                 # reload from disk in case someone else wrote
                 load_persistent()
                 last_master[status_context] = [sha, 'finished', 'failed', commit_date]
-                n_sha = load_current_master()
-                if n_sha and n_sha == sha:
+                (n_sha, modified) = load_current_master()
+                info_is_current = modified and (modified < timestamp_master_fetched)
+                sha_in_file_matches = n_sha and (n_sha == sha)
+                if (info_is_current and sha_in_file_matches) or not info_is_current:
                     set_build_status(status_context, 'failed')
         # mark as not running
         while run_entry in running_jobs:
@@ -831,7 +852,9 @@ def consider_master(master, get_only=False):
     return sorted(viable_checks, key=lambda x: x[1])
 
 def scan_pulls():
+    global timestamp_master_fetched
     master = github_get('branches/master')
+    timestamp_master_fetched = datetime.datetime.utcnow()
     master_sha = master['commit']['sha']
     # since we are in scan mode, store current master
     # only do this if verify hasn't touched master before we scanned
@@ -867,10 +890,13 @@ def head_is_pending(head, status_context):
     return False
 
 def verify_pull(pull):
+    global timestamp_master_fetched
     data = None
     is_master_check = False
     status_context = status_context_from_config(default_arch_config)
     if pull == "-":
+        # initialize priority to highest number (lowest priority)
+        priority = sys.maxsize
         pulls = get_sorted_pulls()
         # use first pending pull in sorted list
         for pull_info in pulls:
@@ -883,6 +909,7 @@ def verify_pull(pull):
 
         # consider checking master
         master = github_get('branches/master')
+        timestamp_master_fetched = datetime.datetime.utcnow()
         master_sha = master['commit']['sha']
         master_info = consider_master(master, True)
         for info in master_info:
