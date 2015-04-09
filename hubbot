@@ -15,7 +15,7 @@ import datetime
 import dateutil.parser
 
 dry_run = False
-verbose = True
+verbose = False
 tail_log = False
 
 new_style = False
@@ -463,30 +463,30 @@ def consider_head(head, master, status_context):
                                                                   "description": status_message_master_changed,
                                                                   "target_url": s['target_url'],
                                                                   "context": status_context })
-                    return (pull_status_pending, 'already passed, but master changed')
+                    return (pull_status_pending, 'already passed, but master changed', status)
                 else:
                     trace("%s already verified" % head['label'])
-                    return (pull_status_finished, 'passed')
+                    return (pull_status_finished, 'passed', status)
             elif s['description'] == status_message_master_changed:
-                return (pull_status_pending, 'already passed, but master changed')
+                return (pull_status_pending, 'already passed, but master changed', status)
             elif s['state'] == 'error':
                 trace("%s needs verification (error)" % head['label'])
-                return (pull_status_pending, '')
+                return (pull_status_pending, '', status)
             elif status_is_pending(s):
                 trace("%s needs verification (pending)" % head['label'])
                 if (s['description'] == status_message_running):
-                    return (pull_status_running, '')
-                return (pull_status_pending, '')
+                    return (pull_status_running, '', status)
+                return (pull_status_pending, '', status)
             elif s['description'] == "Hubbot needs help with rebasing":
-                return (pull_status_finished, 'failed, needs rebase')
+                return (pull_status_finished, 'failed, needs rebase', status)
             else:
                 trace("%s already failed" % head['label'])
-                return (pull_status_finished, 'failed')
+                return (pull_status_finished, 'failed', status)
     trace("%s needs verification (new)" % head['label'])
     set_github_status(master_repo, head['sha'], { "state": "pending" if not new_style else "success",
                                                   "description": "Hubbot will get to this eventually",
                                                   "context": status_context })
-    return (pull_status_pending, '')
+    return (pull_status_pending, '', status)
 
 def get_user_html(url):
     user_info = github_get_authenticated(url)
@@ -533,11 +533,11 @@ def print_jobs_table(title, jobs):
         <tbody>
 """ % (title)
     for job in jobs:
-        job_class = determine_job_class(job[2], job[3])
-        is_pull_request = job[4]
+        job_class = determine_job_class(job['pull_status'], job['comment'])
+        is_pull_request = job['is_pull']
 
         if is_pull_request:
-            p = job[0]
+            p = job['data']
             head = p['head']
             job_desc = "<a href=\"%s\">%s</a>" % (p['html_url'], p['title'])
             user_login = head['user']['login']
@@ -550,7 +550,7 @@ def print_jobs_table(title, jobs):
                 user_login = "<a href=\"%s\">%s</a>" % (user_html, user_login)
             sha = head['sha']
         else:
-            m = job[0]
+            m = job['data']
             if m['commit']:
                 c = m['commit']
                 if c['sha']:
@@ -581,10 +581,13 @@ def print_jobs_table(title, jobs):
                     job_desc = 'master'
             pass
 
-        status_context = job[5]
-        comment = job[3]
+        status_context = job['config']
+        comment = job['comment']
         # get status, filtered by entries that concern us
-        status = github_get("commits/%s/status" % (sha))
+        if 'status_data' in job:
+            status = job['status_data']
+        else:
+            status = github_get("commits/%s/status" % (sha))
         if status and status['statuses']:
             status = filter(lambda s: s['context'] == status_context and
                                       'hubbot' in "%s" % (s['target_url']),
@@ -605,7 +608,7 @@ def print_jobs_table(title, jobs):
             <td>%s</td>
             <td>%s</td>
             <td>%s</td>
-          </tr>""" % (job_class, job_desc, user_login, job[2], job[1], status_context, comment)
+          </tr>""" % (job_class, job_desc, user_login, job['pull_status'], job['priority'], status_context, comment)
     text = text + """
         </tbody>
       </table>
@@ -614,7 +617,7 @@ def print_jobs_table(title, jobs):
     return text
 
 def print_master_details(extended_info):
-    master_jobs = filter(lambda p: not p[4], extended_info)
+    master_jobs = filter(lambda p: not p['is_pull'], extended_info)
     if not master_jobs:
         return """
     <div class="container">
@@ -643,28 +646,29 @@ def print_master_details(extended_info):
         status_context = status_context_from_config(config)
         # we always want info on current master
         # if that is broken, we want info on last working
-        config_job = filter(lambda p: p[5] == status_context, master_jobs)
+        config_job = filter(lambda p: p['config'] == status_context, master_jobs)
         if len(config_job) < 1:
             # some kind of error, we should always have a job info for master
             entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'current master'))
         else:
             config_job = config_job[0]
-            job_sha = config_job[0]['commit']['sha']
-            job_class = determine_job_class(config_job[2], config_job[3])
+            job_sha = config_job['data']['commit']['sha']
+            job_class = determine_job_class(config_job['pull_status'], config_job['comment'])
             commit_link = "<a href=\"%s\">%s</a>" % (
                 os.path.join("https://github.com", master_repo, "commit", job_sha),
                 job_sha
                 )
             commit_date = ""
-            if 'committer' in config_job[0]['commit']['commit'] and 'date' in config_job[0]['commit']['commit']['committer']:
-                commit_date = config_job[0]['commit']['commit']['committer']['date']
+            commit_data = config_job['data']['commit']['commit']
+            if 'committer' in commit_data and 'date' in commit_data['committer']:
+                commit_date = commit_data['committer']['date']
             commit_comment = "current master"
-            if config_job[3]:
-                commit_comment += ": " + config_job[3]
-            entries.append((job_class, status_context, commit_link, commit_date, config_job[2], commit_comment))
+            if config_job['comment']:
+                commit_comment += ": " + config_job['comment']
+            entries.append((job_class, status_context, commit_link, commit_date, config_job['pull_status'], commit_comment))
 
             # if current master hasn't passed or is still pending, get info on the last checked master
-            if config_job[3] != "passed" or config_job[2] == pull_status_pending:
+            if config_job['comment'] != "passed" or config_job['pull_status'] == pull_status_pending:
                 if not status_context in last_master or not last_master[status_context]:
                     entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'last successful master'))
                 else:
@@ -757,16 +761,16 @@ def publish_status(extended_info):
 
     # print all elements in their respective category
     tables = print_jobs_table('pending jobs',
-                              filter(lambda p: p[2] in [pull_status_pending, pull_status_running],
+                              filter(lambda p: p['pull_status'] in [pull_status_pending, pull_status_running],
                                      extended_info)
                              )
     # don't show master checks in finished/skipped jobs
     tables += print_jobs_table('finished jobs',
-                               filter(lambda p: p[4] and p[2] == pull_status_finished,
+                               filter(lambda p: p['is_pull'] and p['pull_status'] == pull_status_finished,
                                       extended_info)
                               )
     tables += print_jobs_table('skipped jobs',
-                               filter(lambda p: p[4] and p[2] == pull_status_skip,
+                               filter(lambda p: p['is_pull'] and p['pull_status'] == pull_status_skip,
                                       extended_info)
                               )
 
@@ -809,31 +813,38 @@ def consider_master(master, get_only=False):
         priority = config[3] + priority_default + priority_penalty_master
         if config != default_arch_config:
             priority += priority_penalty_other_config
-        entry = [master, priority, pull_status_pending, '', False, status_context]
+        entry = {'data': master,
+                 'priority': priority,
+                 'pull_status': pull_status_pending,
+                 'comment': ' user',
+                 'is_pull': False,
+                 'config': status_context,
+                 'status_data': status
+                }
         status_found = False
         for s in status['statuses']:
             if s['context'] == status_context:
                 status_found = True
                 if status_is_success(s):
                     trace("master passed for config %s" % status_context)
-                    entry[2] = pull_status_finished
-                    entry[3] = 'passed'
+                    entry['pull_status'] = pull_status_finished
+                    entry['comment'] = 'passed'
                 elif s['state'] == 'error':
                     trace("master needs verification (error) for config %s" % status_context)
-                    entry[2] = pull_status_pending
-                    entry[3] = 'error'
+                    entry['pull_status'] = pull_status_pending
+                    entry['comment'] = 'error'
                 elif status_is_pending(s):
                     trace("master needs verification (pending) for config %s" % status_context)
                     if (s['description'] == status_message_running):
-                        entry[2] = pull_status_running
-                        entry[3] = ''
+                        entry['pull_status'] = pull_status_running
+                        entry['comment'] = ''
                     else:
                         # pending, no comment is default: no need to update entry
                         pass
                 else:
                     trace("master failed for config %s" % status_context)
-                    entry[2] = pull_status_finished
-                    entry[3] = 'failed'
+                    entry['pull_status'] = pull_status_finished
+                    entry['comment'] = 'failed'
                 # we found the newest status, don't check older ones
                 break
 
@@ -849,7 +860,7 @@ def consider_master(master, get_only=False):
 
 
     # sort by priority
-    return sorted(viable_checks, key=lambda x: x[1])
+    return sorted(viable_checks, key=lambda x: x['priority'])
 
 def scan_pulls():
     global timestamp_master_fetched
@@ -871,15 +882,29 @@ def scan_pulls():
         p = pull_info[0]
         if p['head']['user']['login'] not in user_whitelist:
             trace("%s not in whitelist" % p['head']['user']['login'])
-            extended_info.append((p, pull_info[1], pull_status_skip, 'rejected user', True, pull_info[2]))
+            extended_info.append({'data': p,
+                                  'priority': pull_info[1],
+                                  'pull_status': pull_status_skip,
+                                  'comment': 'rejected user',
+                                  'is_pull': True,
+                                  'config': pull_info[2],
+                                  'status_data': github_get("commits/%s/status" % p['head']['sha'])
+                                 })
             continue
-        (pull_status, pull_comment) = consider_head(p['head'], master_sha, pull_info[2])
-        extended_info.append((p, pull_info[1], pull_status, pull_comment, True, pull_info[2]))
+        (pull_status, pull_comment, status_data) = consider_head(p['head'], master_sha, pull_info[2])
+        extended_info.append({'data': p,
+                              'priority': pull_info[1],
+                              'pull_status': pull_status,
+                              'comment': pull_comment,
+                              'is_pull': True,
+                              'config': pull_info[2],
+                              'status_data': status_data
+                             })
     master_info = consider_master(master)
     if master_info:
         extended_info.extend(master_info)
         # sort by priority
-        extended_info = sorted(extended_info, key=lambda x: x[1])
+        extended_info = sorted(extended_info, key=lambda x: x['priority'])
     publish_status(extended_info)
 
 def head_is_pending(head, status_context):
