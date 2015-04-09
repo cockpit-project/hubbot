@@ -425,7 +425,13 @@ def verify(head, status_context, is_master=False, clean=False):
             if is_master:
                 # reload from disk in case someone else wrote
                 load_persistent()
-                last_master[status_context] = [sha, 'finished', 'passed', commit_date]
+                last_master[status_context] = {
+                        'sha': sha,
+                        'status': 'finished',
+                        'comment': 'passed',
+                        'committed-timestamp': commit_date,
+                        'hubbot_link': wd.url
+                    }
                 last_successful_master[status_context] = last_master[status_context]
                 # only set build status if scan didn't detect a new master in the meantime
                 # unless info in the file is outdated
@@ -450,7 +456,13 @@ def verify(head, status_context, is_master=False, clean=False):
             if is_master and not dry_run:
                 # reload from disk in case someone else wrote
                 load_persistent()
-                last_master[status_context] = [sha, 'finished', 'failed', commit_date]
+                last_master[status_context] = {
+                        'sha': sha,
+                        'status': 'finished',
+                        'comment': 'failed',
+                        'committed-timestamp': commit_date,
+                        'hubbot_link': wd.url
+                    }
                 (n_sha, modified) = load_current_master()
                 info_is_current = modified and (modified < timestamp_master_fetched)
                 sha_in_file_matches = n_sha and (n_sha == sha)
@@ -697,6 +709,21 @@ def print_master_details(extended_info):
             commit_comment = "current master"
             if config_job['comment']:
                 commit_comment += ": " + config_job['comment']
+
+            # get status, filtered by entries that concern us
+            if 'status_data' in config_job:
+                status = config_job['status_data']
+            else:
+                status = github_get("commits/%s/status" % (job_sha))
+            if status and status['statuses']:
+                status = filter(lambda s: s['context'] == status_context and
+                                          'hubbot' in "%s" % (s['target_url']),
+                                status['statuses'])
+            if status:
+                # most recent entry will be first
+                hubbot_link = "<a href=\"%s\">hubbot output</a>" % (status[0]['target_url'])
+                commit_comment += " (%s)" % (hubbot_link)
+
             entries.append((job_class, status_context, commit_link, commit_date, config_job['pull_status'], commit_comment))
 
             # if current master hasn't passed or is still pending, get info on the last checked master
@@ -715,6 +742,8 @@ def print_master_details(extended_info):
                         commit_comment = "last checked master"
                         if last_info['comment']:
                             commit_comment += ": " + last_info['comment']
+                        if last_info['hubbot_link']:
+                            commit_comment += " (<a href=\"%s\">hubbot output</a>" % last_info['hubbot_link']
                         entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
                     # if last check wasn't successful, try to show last successful run
                     if last_info['comment'] != "passed":
@@ -730,6 +759,8 @@ def print_master_details(extended_info):
                             commit_comment = "last successful master"
                             if last_info['comment']:
                                 commit_comment += ": " + last_info['comment']
+                            if last_info['hubbot_link']:
+                                commit_comment += " (<a href=\"%s\">hubbot output</a>" % last_info['hubbot_link']
                             entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
 
     for entry in entries:
