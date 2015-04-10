@@ -21,14 +21,28 @@ if 'master_repo' in config:
 if 'dry_run' in config:
     dry_run = config['dry_run']
 
-os_arch_configurations = [('fedora-22', 'f22', 'x86_64'), ('rhel-7', 'r7', 'x86_64')]
+os_arch_configurations = [{'os': 'fedora-22',
+                           'short': 'f22',
+                           'arch': 'x86_64',
+                           'offset_master': 0,
+                           'offset_pull': 0
+                          },
+                          {'os': 'rhel-7',
+                           'short': 'r7',
+                           'arch': 'x86_64',
+                           'offset_master': -1,
+                           'offset_pull': 2
+                          }
+                         ]
+default_arch_config = os_arch_configurations[0]
 if 'os_arch' in config and config['os_arch']:
     os_arch_configurations = config['os_arch']
+    if os_arch_configurations and len(os_arch_configurations) > 0:
+        default_arch_config = os_arch_configurations[0]
 
-default_arch_config = os_arch_configurations[0]
-default_os = default_arch_config[0]
-default_short = default_arch_config[1]
-default_arch = default_arch_config[2]
+default_os = default_arch_config['os']
+default_short = default_arch_config['short']
+default_arch = default_arch_config['arch']
 
 if 'default' in config:
     (default_os, default_short, default_arch) = config['default']
@@ -39,7 +53,7 @@ def status_context_from_config(config):
     n_suffix = ""
     if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
         n_suffix = "/new"
-    return "hubbot/%s/%s%s" % (config[1], config[2].replace('_', '-'), n_suffix)
+    return "hubbot/%s/%s%s" % (config['short'], config['arch'].replace('_', '-'), n_suffix)
 
 def trace(msg):
     print msg
