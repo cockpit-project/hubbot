@@ -245,7 +245,7 @@ def status_display_name_from_config(config):
     n_suffix = ""
     if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
         n_suffix = "/new"
-    return "%s/%s%s" % (config[0], config[2].replace('_', '-'), n_suffix)
+    return "%s/%s%s" % (config['os'], config['arch'].replace('_', '-'), n_suffix)
 
 def status_image_from_config(config, status):
     if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
