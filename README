@@ -26,6 +26,7 @@ Put something like this into $HOME/.hubbotrc:
       'master_repo': "cockpit-project/cockpit",
       'dry_run': False,
       'remote': False,
+      'keep_work_dirs': 30
       'os_arch': [{'os': 'fedora-22',
                    'short': 'f22',
                    'arch': 'x86_64',
@@ -50,6 +51,10 @@ Put something like this into $HOME/.hubbotrc:
 
 'remote' specifies if hubbot runs on a remote server. If True, the hubbot.work files
 will be looked for via http if they aren't found locally.
+
+'keep_work_dirs' specifies how many output directories will be kept that don't belong
+to an open pull request or master. All output directories accessible via github
+will be kept in addition to this.
 
 'os_arch' entries:
 Of these, 'os' and 'arch' will be used to find the correct images,

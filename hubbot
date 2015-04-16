@@ -22,7 +22,7 @@ new_style = False
 
 is_remote = False
 
-keep_work_dirs = 100
+keep_work_dirs = 30
 work = "%s/hubbot/" % os.environ['HOME']
 work_url = "http://files.cockpit-project.org/hubbot"
 
@@ -283,6 +283,7 @@ def mk_exclusive_dir(path):
 
 class WorkDir(object):
     def __init__(self, name):
+        name = name.replace('hubbot_', '')
         i = 0
         n = name
         while not mk_exclusive_dir (os.path.join (work, n)):
@@ -319,11 +320,22 @@ class WorkDir(object):
                 self.tail.wait()
         trace("Leaving %s" % self.path)
 
-def expire_work_dirs():
+def expire_work_dirs(github_visible_commits):
+    # if we don't have info on what's visible, don't delete anything
+    if not github_visible_commits:
+        return
+    # make sure we don't look at too many commits
+    github_visible_commits = list(set(github_visible_commits))
+    def is_redundant_directory(dirname):
+        if dirname in ["data", "status-images"] or not os.path.isdir(os.path.join(work,dirname)):
+            return False
+        for c in github_visible_commits:
+            if c in dirname:
+                return False
+        return True
     dirs = sorted (map (lambda e: (os.stat(e).st_mtime,e),
                         map (lambda e: os.path.join(work,e),
-                             filter (lambda e: e not in ["data", "status-images"] and os.path.isdir(os.path.join(work,e)),
-                                     os.listdir(work)))),
+                             filter (is_redundant_directory, os.listdir(work)))),
                    lambda x,y: cmp(x[0],y[0]))
     if len(dirs) > keep_work_dirs:
         for d in dirs[0:len(dirs)-keep_work_dirs]:
@@ -389,7 +401,7 @@ def verify(head, status_context, is_master=False, clean=False):
         commit_date = ""
         if 'committer' in head['commit']['commit'] and 'date' in head['commit']['commit']['committer']:
             commit_date = head['commit']['commit']['committer']['date']
-    with WorkDir(sha) as wd:
+    with WorkDir("%s_%s" % (sha, status_context.replace('/', '_'))) as wd:
         load_persistent()
         global last_master
         global last_successful_master
@@ -567,7 +579,7 @@ def get_user_html(url):
 
 def determine_job_class(pull_status, comment):
     if pull_status == pull_status_running:
-        return 'info'
+        return 'warning'
     elif pull_status == pull_status_finished:
         if 'passed' in comment:
             return 'success'
@@ -576,7 +588,7 @@ def determine_job_class(pull_status, comment):
     elif pull_status == pull_status_pending and 'passed' in comment:
         return 'success'
     elif comment == 'rejected user':
-        return 'warning'
+        return 'info'
     return ''
 
 def print_jobs_table(title, jobs):
@@ -772,7 +784,7 @@ def print_master_details(extended_info):
                         if last_info['comment']:
                             commit_comment += ": " + last_info['comment']
                         if last_info['hubbot_link']:
-                            commit_comment += " (<a href=\"%s\">hubbot output</a>" % last_info['hubbot_link']
+                            commit_comment += " (<a href=\"%s\">hubbot output</a>)" % last_info['hubbot_link']
                         entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
                     # if last check wasn't successful, try to show last successful run
                     if last_info['comment'] != "passed":
@@ -789,7 +801,7 @@ def print_master_details(extended_info):
                             if last_info['comment']:
                                 commit_comment += ": " + last_info['comment']
                             if last_info['hubbot_link']:
-                                commit_comment += " (<a href=\"%s\">hubbot output</a>" % last_info['hubbot_link']
+                                commit_comment += " (<a href=\"%s\">hubbot output</a>)" % last_info['hubbot_link']
                             entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
 
     for entry in entries:
@@ -1020,10 +1032,12 @@ def verify_pull(pull):
     data = None
     is_master_check = False
     status_context = status_context_from_config(default_arch_config)
+    github_visible_commits = None
     if pull == "-":
         # initialize priority to highest number (lowest priority)
         priority = sys.maxsize
         pulls = get_sorted_pulls()
+        github_visible_commits = map(lambda p: p['data']['head']['sha'], pulls)
         # use first pending pull in sorted list
         for pull_info in pulls:
             p = pull_info['data']
@@ -1037,6 +1051,7 @@ def verify_pull(pull):
         master = github_get('branches/master')
         timestamp_master_fetched = datetime.datetime.utcnow()
         master_sha = master['commit']['sha']
+        github_visible_commits.append(master_sha)
         master_info = consider_master(master, True)
         for info in master_info:
             if info['pull_status'] != pull_status_pending:
@@ -1056,7 +1071,7 @@ def verify_pull(pull):
     else:
         data = github_get("pulls/%s" % pull)
 
-    expire_work_dirs()
+    expire_work_dirs(github_visible_commits)
     clean = False
 
     if is_master_check:
