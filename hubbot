@@ -64,6 +64,9 @@ priority_penalty_other_config = 1
 # this is added to priority for checks on master, stacks with priority_penalty_other_config
 priority_penalty_master = 1
 
+# this is added to pulls if they are checked again due to changed master
+priority_penalty_master_changed = 2
+
 if 'priority_default' in config:
     priority_default = config['priority_default']
 if 'priority_needs_attention' in config:
@@ -74,6 +77,8 @@ if 'priority_penalty_other_config' in config:
     priority_penalty_other_config = config['priority_penalty_other_config']
 if 'priority_penalty_master' in config:
     priority_penalty_master = config['priority_penalty_master']
+if 'priority_penalty_master_changed' in config:
+    priority_penalty_master_changed = config['priority_penalty_master_changed']
 
 os_arch_configurations = [{'os': 'fedora-22',
                            'short': 'f22',
@@ -536,9 +541,10 @@ def status_is_success(status):
 def status_is_pending(status):
     return status['state'] == 'pending' or status['description'] == status_message_master_changed or status['description'] == "Hubbot will get to this eventually"
 
-def consider_head(head, master, status_context):
-    status = github_get("commits/%s/status" % head['sha'])
-    for s in status['statuses']:
+# returns (pull_status, 'comment', priority_change)
+# the priority change only describes the changes during this call (e.g. marked a pull as pending)
+def consider_head(head, master, status_context, status_data):
+    for s in status_data['statuses']:
         if s['context'] == status_context:
             if status_is_success(s):
                 old_master = master_from_status(s)
@@ -548,30 +554,30 @@ def consider_head(head, master, status_context):
                                                                   "description": status_message_master_changed,
                                                                   "target_url": s['target_url'],
                                                                   "context": status_context })
-                    return (pull_status_pending, 'already passed, but master changed', status)
+                    return (pull_status_pending, 'already passed, but master changed', priority_penalty_master_changed)
                 else:
                     trace("%s already verified" % head['label'])
                     return (pull_status_finished, 'passed', status)
             elif s['description'] == status_message_master_changed:
-                return (pull_status_pending, 'already passed, but master changed', status)
+                return (pull_status_pending, 'already passed, but master changed', 0)
             elif s['state'] == 'error':
                 trace("%s needs verification (error)" % head['label'])
-                return (pull_status_pending, '', status)
+                return (pull_status_pending, '', 0)
             elif status_is_pending(s):
                 trace("%s needs verification (pending)" % head['label'])
                 if (s['description'] == status_message_running):
-                    return (pull_status_running, '', status)
-                return (pull_status_pending, '', status)
+                    return (pull_status_running, '', 0)
+                return (pull_status_pending, '', 0)
             elif s['description'] == "Hubbot needs help with rebasing":
-                return (pull_status_finished, 'failed, needs rebase', status)
+                return (pull_status_finished, 'failed, needs rebase', 0)
             else:
                 trace("%s already failed" % head['label'])
-                return (pull_status_finished, 'failed', status)
+                return (pull_status_finished, 'failed', 0)
     trace("%s needs verification (new)" % head['label'])
     set_github_status(master_repo, head['sha'], { "state": "pending" if not new_style else "success",
                                                   "description": "Hubbot will get to this eventually",
                                                   "context": status_context })
-    return (pull_status_pending, '', status)
+    return (pull_status_pending, '', 0)
 
 def get_user_html(url):
     user_info = github_get_authenticated(url)
@@ -896,14 +902,22 @@ def get_sorted_pulls():
             for l in p_labels:
                 if l['name'] in ['needswork', 'needsdesign']:
                     priority = priority_needs_attention
+        # get status data for the pull
+        status = github_get("commits/%s/status" % p['head']['sha'])
         for config in os_arch_configurations:
             status_context = status_context_from_config(config)
             priority_offset = config['offset_pull']
             if config != default_arch_config:
                 priority_offset += priority_penalty_other_config
+            for s in status['statuses']:
+                if s['context'] == status_context:
+                    if status_is_pending(s) and s['description'] == status_message_master_changed:
+                        priority_offset += priority_penalty_master_changed
+                    break
             viable_pulls.append({'data': p,
                                  'priority': priority+priority_offset,
-                                 'config': status_context
+                                 'config': status_context,
+                                 'status_data': status
                                 })
 
     # sort by priority
@@ -923,7 +937,7 @@ def consider_master(master, get_only=False):
         entry = {'data': master,
                  'priority': priority,
                  'pull_status': pull_status_pending,
-                 'comment': ' user',
+                 'comment': '',
                  'is_pull': False,
                  'config': status_context,
                  'status_data': status
@@ -1004,14 +1018,14 @@ def scan_pulls():
                                   'status_data': github_get("commits/%s/status" % p['head']['sha'])
                                  })
             continue
-        (pull_status, pull_comment, status_data) = consider_head(p['head'], master_sha, pull_info['config'])
+        (pull_status, pull_comment, priority_change) = consider_head(p['head'], master_sha, pull_info['config'], pull_info['status_data'])
         extended_info.append({'data': p,
-                              'priority': pull_info['priority'],
+                              'priority': pull_info['priority'] + priority_change,
                               'pull_status': pull_status,
                               'comment': pull_comment,
                               'is_pull': True,
                               'config': pull_info['config'],
-                              'status_data': status_data
+                              'status_data': pull_info['status_data']
                              })
     master_info = consider_master(master)
     if master_info:
