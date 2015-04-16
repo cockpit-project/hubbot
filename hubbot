@@ -567,7 +567,7 @@ def get_user_html(url):
 
 def determine_job_class(pull_status, comment):
     if pull_status == pull_status_running:
-        return 'info'
+        return 'warning'
     elif pull_status == pull_status_finished:
         if 'passed' in comment:
             return 'success'
@@ -576,7 +576,7 @@ def determine_job_class(pull_status, comment):
     elif pull_status == pull_status_pending and 'passed' in comment:
         return 'success'
     elif comment == 'rejected user':
-        return 'warning'
+        return 'info'
     return ''
 
 def print_jobs_table(title, jobs):
