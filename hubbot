@@ -772,7 +772,7 @@ def print_master_details(extended_info):
                         if last_info['comment']:
                             commit_comment += ": " + last_info['comment']
                         if last_info['hubbot_link']:
-                            commit_comment += " (<a href=\"%s\">hubbot output</a>" % last_info['hubbot_link']
+                            commit_comment += " (<a href=\"%s\">hubbot output</a>)" % last_info['hubbot_link']
                         entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
                     # if last check wasn't successful, try to show last successful run
                     if last_info['comment'] != "passed":
@@ -789,7 +789,7 @@ def print_master_details(extended_info):
                             if last_info['comment']:
                                 commit_comment += ": " + last_info['comment']
                             if last_info['hubbot_link']:
-                                commit_comment += " (<a href=\"%s\">hubbot output</a>" % last_info['hubbot_link']
+                                commit_comment += " (<a href=\"%s\">hubbot output</a>)" % last_info['hubbot_link']
                             entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
 
     for entry in entries:
