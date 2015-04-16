@@ -557,7 +557,7 @@ def consider_head(head, master, status_context, status_data):
                     return (pull_status_pending, 'already passed, but master changed', priority_penalty_master_changed)
                 else:
                     trace("%s already verified" % head['label'])
-                    return (pull_status_finished, 'passed', status)
+                    return (pull_status_finished, 'passed', 0)
             elif s['description'] == status_message_master_changed:
                 return (pull_status_pending, 'already passed, but master changed', 0)
             elif s['state'] == 'error':
