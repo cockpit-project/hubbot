@@ -86,6 +86,13 @@ os_arch_configurations = [{'os': 'fedora-22',
                            'offset_master': 0,
                            'offset_pull': 0
                           },
+                          {'os': 'fedora-rawhide',
+                           'short': 'fraw',
+                           'arch': 'x86_64',
+                           'offset_master': 0,
+                           'offset_pull': 0,
+                           'noauto': True
+                          },
                           {'os': 'rhel-7',
                            'short': 'r7',
                            'arch': 'x86_64',
@@ -917,7 +924,8 @@ def get_sorted_pulls():
             viable_pulls.append({'data': p,
                                  'priority': priority+priority_offset,
                                  'config': status_context,
-                                 'status_data': status
+                                 'status_data': status,
+                                 'noauto': 'noauto' in config and config['noauto']
                                 })
 
     # sort by priority
@@ -970,7 +978,7 @@ def consider_master(master, get_only=False):
                 break
 
         # if there was no status, then this is new and needs to be marked as pending
-        if not status_found and not get_only:
+        if not status_found and not get_only and not ('noauto' in config and config['noauto']):
             # pending, no comment is default: no need to update entry
             trace("master needs verification for config %s" % status_context)
             set_github_status(master_repo, master_sha, { "state": "pending" if not new_style else "success",
@@ -1015,7 +1023,18 @@ def scan_pulls():
                                   'comment': 'rejected user',
                                   'is_pull': True,
                                   'config': pull_info['config'],
-                                  'status_data': github_get("commits/%s/status" % p['head']['sha'])
+                                  'status_data': pull_info['status_data']
+                                 })
+            continue
+        if pull_info['noauto']:
+            trace("no %s autobuilds for %s" % (pull_info['config'], p['head']['label']))
+            extended_info.append({'data': p,
+                                  'priority': pull_info['priority'],
+                                  'pull_status': pull_status_skip,
+                                  'comment': 'no autobuilds',
+                                  'is_pull': True,
+                                  'config': pull_info['config'],
+                                  'status_data': pull_info['status_data']
                                  })
             continue
         (pull_status, pull_comment, priority_change) = consider_head(p['head'], master_sha, pull_info['config'], pull_info['status_data'])

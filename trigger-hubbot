@@ -27,6 +27,13 @@ os_arch_configurations = [{'os': 'fedora-22',
                            'offset_master': 0,
                            'offset_pull': 0
                           },
+                          {'os': 'fedora-rawhide',
+                           'short': 'fraw',
+                           'arch': 'x86_64',
+                           'offset_master': 0,
+                           'offset_pull': 0,
+                           'noauto': True
+                          },
                           {'os': 'rhel-7',
                            'short': 'r7',
                            'arch': 'x86_64',
