@@ -41,6 +41,9 @@ config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 github_token = config['github_token']
 user_whitelist = config['user_whitelist']
 
+github_environ = os.environ.copy()
+github_environ["user"] = "%s:x-oauth-basic" % github_token
+
 master_repo = 'cockpit-project/cockpit'
 if 'master_repo' in config:
     master_repo = config['master_repo']
@@ -369,32 +372,28 @@ def git_output(*args):
 
 def github_get_authenticated(url):
     return json.loads(subprocess.check_output ([ "curl", "-s",
-                                                 "-u", "%s:x-oauth-basic" % github_token,
                                                  url,
-                                               ]))
+                                               ], env=github_environ))
 
 def github_get(url):
     return json.loads(subprocess.check_output ([ "curl", "-s",
-                                                 "-u", "%s:x-oauth-basic" % github_token,
                                                  "https://api.github.com/repos/%s/%s" % (master_repo, url),
-                                               ]))
+                                               ], env=github_environ))
 
 def add_github_comment(issue, message):
     subprocess.check_call ([ "curl", "-s",
-                             "-u", "%s:x-oauth-basic" % github_token,
                              "https://api.github.com/repos/%s/issues/%s/comments" % (master_repo, issue),
                              "-d", json.dumps({"body": message})
-                           ])
+                           ], env=github_environ)
 
 def set_github_status(repo, sha, status):
     if dry_run:
         print "Status %s: %s %s" % (sha, status['state'], status['description'])
     else:
         subprocess.check_output ([ "curl", "-s",
-                                   "-u", "%s:x-oauth-basic" % github_token,
                                    "https://api.github.com/repos/%s/statuses/%s" % (repo, sha),
                                    "-d", json.dumps(status)
-                                 ])
+                                 ], env=github_environ)
 
 def add_comment(issue, message):
     if issue:
