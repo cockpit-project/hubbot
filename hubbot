@@ -91,7 +91,16 @@ os_arch_configurations = [{'os': 'fedora-22',
                            'arch': 'x86_64',
                            'offset_master': 0,
                            'offset_pull': 0,
-                           'noauto': True
+                           'noauto': True,
+                           'trigger_labels': ['hubbot:check-fraw']
+                          },
+                          {'os': 'fedora-atomic-22',
+                           'short': 'f22-atomic',
+                           'arch': 'x86_64',
+                           'offset_master': 0,
+                           'offset_pull': 0,
+                           'noauto': True,
+                           'trigger_labels': ['hubbot:check-f22-atomic']
                           },
                           {'os': 'rhel-7',
                            'short': 'r7',
@@ -903,6 +912,7 @@ def get_sorted_pulls():
     viable_pulls = [ ];
     for p in pulls:
         priority = priority_default
+        p_labels = None
         if p['title'].lower().startswith('wip'):
             priority = priority_work_in_progress
         else:
@@ -923,12 +933,23 @@ def get_sorted_pulls():
                     if status_is_pending(s) and s['description'] == status_message_master_changed:
                         priority_offset += priority_penalty_master_changed
                     break
+            no_auto = 'noauto' in config and config['noauto']
+            triggered = False
+            if no_auto and 'trigger_labels' in config:
+                trigger_labels = config['trigger_labels']
+                if not p_labels:
+                    p_labels = github_get("issues/%s/labels" % p['number'])
+                for l in p_labels:
+                    if l['name'] in trigger_labels:
+                        triggered = True
+                        break
             viable_pulls.append({'data': p,
                                  'priority': priority+priority_offset,
                                  'config': status_context,
                                  'status_data': status,
-                                 'noauto': 'noauto' in config and config['noauto']
-                                })
+                                 'noauto': no_auto,
+                                 'triggered': triggered
+                                 })
 
     # sort by priority
     return sorted(viable_pulls, key=lambda x: x['priority'])
@@ -980,6 +1001,7 @@ def consider_master(master, get_only=False):
                 break
 
         # if there was no status, then this is new and needs to be marked as pending
+        # master can't be manually forced, so we don't need to check trigger_labels
         if not status_found and not get_only and not ('noauto' in config and config['noauto']):
             # pending, no comment is default: no need to update entry
             trace("master needs verification for config %s" % status_context)
@@ -1028,7 +1050,7 @@ def scan_pulls():
                                   'status_data': pull_info['status_data']
                                  })
             continue
-        if pull_info['noauto']:
+        if pull_info['noauto'] and not pull_info['triggered']:
             trace("no %s autobuilds for %s" % (pull_info['config'], p['head']['label']))
             extended_info.append({'data': p,
                                   'priority': pull_info['priority'],
