@@ -91,16 +91,14 @@ os_arch_configurations = [{'os': 'fedora-22',
                            'arch': 'x86_64',
                            'offset_master': 0,
                            'offset_pull': 0,
-                           'noauto': True,
-                           'trigger_labels': ['hubbot:check-fraw']
+                           'noauto': True
                           },
                           {'os': 'fedora-atomic-22',
                            'short': 'f22-atomic',
                            'arch': 'x86_64',
                            'offset_master': 0,
                            'offset_pull': 0,
-                           'noauto': True,
-                           'trigger_labels': ['hubbot:check-f22-atomic']
+                           'noauto': True
                           },
                           {'os': 'rhel-7',
                            'short': 'r7',
@@ -935,12 +933,11 @@ def get_sorted_pulls():
                     break
             no_auto = 'noauto' in config and config['noauto']
             triggered = False
-            if no_auto and 'trigger_labels' in config:
-                trigger_labels = config['trigger_labels']
+            if no_auto:
                 if not p_labels:
                     p_labels = github_get("issues/%s/labels" % p['number'])
                 for l in p_labels:
-                    if l['name'] in trigger_labels:
+                    if l['name'] == ('hubbot:%s:check' % config['short']):
                         triggered = True
                         break
             viable_pulls.append({'data': p,
