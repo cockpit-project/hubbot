@@ -943,6 +943,7 @@ def get_sorted_pulls():
             viable_pulls.append({'data': p,
                                  'priority': priority+priority_offset,
                                  'config': status_context,
+                                 'config_data': config,
                                  'status_data': status,
                                  'noauto': no_auto,
                                  'triggered': triggered
@@ -968,6 +969,7 @@ def consider_master(master, get_only=False):
                  'comment': '',
                  'is_pull': False,
                  'config': status_context,
+                 'config_data': config,
                  'status_data': status
                 }
         status_found = False
@@ -1085,7 +1087,7 @@ def verify_pull(pull):
     global timestamp_master_fetched
     data = None
     is_master_check = False
-    status_context = status_context_from_config(default_arch_config)
+    config = default_arch_config
     github_visible_commits = None
     if pull == "-":
         # initialize priority to highest number (lowest priority)
@@ -1098,7 +1100,7 @@ def verify_pull(pull):
             if head_is_pending(p['head'], pull_info['config']):
                 data = p
                 priority = pull_info['priority']
-                status_context = pull_info['config']
+                config = pull_info['config_data']
                 break
 
         # consider checking master
@@ -1116,7 +1118,7 @@ def verify_pull(pull):
             data = info['data']
             priority = info['priority']
             is_master_check = True
-            status_context = info['config']
+            config = info['config_data']
 
         if data is None:
             trace("No verifications pending")
@@ -1128,13 +1130,15 @@ def verify_pull(pull):
     expire_work_dirs(github_visible_commits)
     clean = False
 
+    status_context = status_context_from_config(config)
+
     if is_master_check:
         trace("Verifying master for config %s%s" % (status_context, " (cleanly)" if clean else ""))
         verify(data, status_context, True, clean)
     else:
         labels = github_get("issues/%s/labels" % data['number'])
         for l in labels:
-            if l['name'] == "hubbot:makeimages":
+            if l['name'] == ("hubbot:%s:clean" % config['short']):
                 clean = True
                 break
         trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
