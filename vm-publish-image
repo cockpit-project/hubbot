@@ -2,12 +2,11 @@
 
 SELF=vm-publish-image
 
-targetdir=/srv/testdata/images.stage/
+targetdir=/srv/testdata/images
 
 TEST_DATA=${TEST_DATA:-$PWD}
-TEST_OS=${TEST_OS:-fedora-21}
+TEST_OS=${TEST_OS:-fedora-22}
 TEST_ARCH=${TEST_ARCH:-x86_64}
-TEST_RUN=./run
 
 warning()
 {
@@ -20,7 +19,7 @@ silent()
 	return $?
 }
 
-set -euf
+set -eu
 
 usage()
 {
@@ -48,28 +47,24 @@ case ${1:-} in
 	;;
 esac
 
-TEST_IMAGE=$flavor-$TEST_OS-$TEST_ARCH
+publish () {
+    checksum_file=$1
 
-checksum_file=$TEST_IMAGE-checksum
+    if [ -f "$targetdir/$checksum_file" ]; then
+      return
+    fi
 
-cd "images"
+    cat "$checksum_file" | while read sum file; do
+        echo Publishing $file
+        pv "$file" | xz -ze >"$targetdir/$file.xz"
+    done
+    cp "$checksum_file" "$targetdir/$checksum_file"
+}
 
-if [ ! -f "$checksum_file" ]; then
-    warning "$checksum_file does not exist"
-    exit 1
-fi
+cd "$TEST_DATA/images"
 
-if cmp "$targetdir/$checksum_file" "$checksum_file"; then
-    exit 0
-fi
-
-echo Checking sha56sums...
-if ! sha256sum --quiet --check "$checksum_file"; then
-    exit 1
-fi
-
-cat "$checksum_file" | while read sum file; do
-  echo Publishing $file
-  pv "$file" | xz -ze >"$targetdir/$file.xz"
+for f in $flavor-$TEST_OS-$TEST_ARCH-*-checksum; do
+    if [ -f "$f" ]; then
+      publish "$f"
+    fi
 done
-cp "$checksum_file" "$targetdir/$checksum_file"
