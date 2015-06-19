@@ -1138,7 +1138,7 @@ def verify_pull(pull):
     clean = False
 
     if is_master_check:
-        trace("Verifying master for config %s%s" % (status_context, " (cleanly)" if clean else ""))
+        trace("Verifying master for config %s%s" % (status_context_from_config(config), " (cleanly)" if clean else ""))
         verify(data, config, True, clean)
     else:
         labels = github_get("issues/%s/labels" % data['number'])
