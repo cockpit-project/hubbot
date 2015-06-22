@@ -371,7 +371,8 @@ def expire_work_dirs(github_visible_commits):
     if len(dirs) > keep_work_dirs:
         for d in dirs[0:len(dirs)-keep_work_dirs]:
             trace("Expiring %s" % d)
-            shutil.rmtree(d)
+            if not dry_run:
+                shutil.rmtree(d)
 
 def expire_images():
     keep = { }
@@ -398,7 +399,8 @@ def expire_images():
             if fnmatch.fnmatch(f, k):
                 return
         trace("Expiring %s" % f)
-        shutil.move(os.path.join(images_dir, f), expired_dir)
+        if not dry_run:
+            shutil.move(os.path.join(images_dir, f), expired_dir)
 
 def cmd(*args):
     print "+", " ".join(list(args))
