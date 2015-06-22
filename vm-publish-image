@@ -47,7 +47,7 @@ case ${1:-} in
 	;;
 esac
 
-publish () {
+maybe_publish () {
     checksum_file=$1
 
     if [ -f "$targetdir/$checksum_file" ]; then
@@ -61,10 +61,32 @@ publish () {
     cp "$checksum_file" "$targetdir/$checksum_file"
 }
 
+maybe_unpublish () {
+    checksum_file=$1
+
+    if [ -f "$TEST_DATA/images/$checksum_file" ]; then
+      return
+    fi
+
+    cat "$checksum_file" | while read sum file; do
+        echo Unpublishing $file
+        rm $file.xz
+    done
+    rm "$checksum_file"
+}
+
 cd "$TEST_DATA/images"
 
 for f in $flavor-$TEST_OS-$TEST_ARCH-*-checksum; do
     if [ -f "$f" ]; then
-      publish "$f"
+      maybe_publish "$f"
+    fi
+done
+
+cd "$targetdir"
+
+for f in $flavor-$TEST_OS-$TEST_ARCH-*-checksum; do
+    if [ -f "$f" ]; then
+      maybe_unpublish "$f"
     fi
 done
