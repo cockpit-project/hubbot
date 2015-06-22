@@ -386,11 +386,15 @@ def expire_images():
         if os.path.exists(t):
             for c in filter(lambda e: e.endswith(".conf"), os.listdir(t)):
                 flavor = c[:-5]
-                conf = ast.literal_eval(open(os.path.join(t, c)).read())
-                if 'tags' in conf:
-                    tags = conf['tags']
-                    for os_ in tags:
-                        keep_image (flavor, os_, tags[os_])
+                try:
+                    conf = ast.literal_eval(open(os.path.join(t, c)).read())
+                    if 'tags' in conf:
+                        tags = conf['tags']
+                        for os_ in tags:
+                            keep_image (flavor, os_, tags[os_])
+                except:
+                    print "error reading %s" % c
+                    pass
 
     images_dir = os.path.join(test_data, "images")
     expired_dir = os.path.join(test_data, "images.expired")
