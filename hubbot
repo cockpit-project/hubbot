@@ -13,6 +13,7 @@ import pprint
 import time
 import datetime
 import dateutil.parser
+import fnmatch
 
 dry_run = False
 verbose = False
@@ -342,6 +343,17 @@ class WorkDir(object):
                 self.tail.wait()
         trace("Leaving %s" % self.path)
 
+def list_work_dirs():
+    def is_work_dir(dirname):
+        if dirname in ["data", "status-images"] or not os.path.isdir(os.path.join(work,dirname)):
+            return False
+        return True
+    return map(lambda xy: xy[1],
+               sorted (map (lambda e: (os.stat(e).st_mtime,e),
+                            map (lambda e: os.path.join(work,e),
+                                 filter (is_work_dir, os.listdir(work)))),
+                       lambda x,y: cmp(x[0],y[0])))
+
 def expire_work_dirs(github_visible_commits):
     # if we don't have info on what's visible, don't delete anything
     if not github_visible_commits:
@@ -349,20 +361,42 @@ def expire_work_dirs(github_visible_commits):
     # make sure we don't look at too many commits
     github_visible_commits = list(set(github_visible_commits))
     def is_redundant_directory(dirname):
-        if dirname in ["data", "status-images"] or not os.path.isdir(os.path.join(work,dirname)):
-            return False
         for c in github_visible_commits:
             if c in dirname:
                 return False
         return True
-    dirs = sorted (map (lambda e: (os.stat(e).st_mtime,e),
-                        map (lambda e: os.path.join(work,e),
-                             filter (is_redundant_directory, os.listdir(work)))),
-                   lambda x,y: cmp(x[0],y[0]))
+    dirs = filter (is_redundant_directory, list_work_dirs())
     if len(dirs) > keep_work_dirs:
         for d in dirs[0:len(dirs)-keep_work_dirs]:
-            trace("Expiring %s" % d[1])
-            shutil.rmtree(d[1])
+            trace("Expiring %s" % d)
+            shutil.rmtree(d)
+
+def expire_images():
+    keep = { }
+
+    def keep_image(flavor, os_, tag):
+        keep["%s-%s-*-%s-checksum" % (flavor, os_, tag)] = True
+        keep["%s-%s-*-%s.*" % (flavor, os_, tag)] = True
+
+    for d in list_work_dirs():
+        t = os.path.join(d, "test")
+        if os.path.exists(t):
+            for c in filter(lambda e: e.endswith(".conf"), os.listdir(t)):
+                flavor = c[:-5]
+                conf = ast.literal_eval(open(os.path.join(t, c)).read())
+                if 'tags' in conf:
+                    tags = conf['tags']
+                    for os_ in tags:
+                        keep_image (flavor, os_, tags[os_])
+
+    images_dir = "%s/cockpit-data/images" % os.environ['HOME']
+    expired_dir = "%s/cockpit-data/images.expired" % os.environ['HOME']
+    for f in os.listdir(images_dir):
+        for k in keep:
+            if fnmatch.fnmatch(f, k):
+                return
+        trace("Expiring %s" % f)
+        shutil.move(os.path.join(images_dir, f), expired_dir)
 
 def cmd(*args):
     print "+", " ".join(list(args))
@@ -1135,6 +1169,7 @@ def verify_pull(pull):
         data = github_get("pulls/%s" % pull)
 
     expire_work_dirs(github_visible_commits)
+    expire_images()
     clean = False
 
     if is_master_check:
@@ -1187,6 +1222,9 @@ def print_usage():
 
 if dry_run:
     print "hubbot dry run"
+
+expire_images()
+exit(0)
 
 # make sure we have status images
 generate_status_images()
