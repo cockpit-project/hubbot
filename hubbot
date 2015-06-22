@@ -27,6 +27,8 @@ keep_work_dirs = 30
 work = "%s/hubbot/" % os.environ['HOME']
 work_url = "http://files.cockpit-project.org/hubbot"
 
+test_data = "%s/cockpit-data/" % os.environ['HOME']
+
 stats_filename = os.path.join(work, "hubbot.persistent")
 stats_filename_remote = os.path.join(work_url, "hubbot.persistent")
 
@@ -389,8 +391,8 @@ def expire_images():
                     for os_ in tags:
                         keep_image (flavor, os_, tags[os_])
 
-    images_dir = "%s/cockpit-data/images" % os.environ['HOME']
-    expired_dir = "%s/cockpit-data/images.expired" % os.environ['HOME']
+    images_dir = os.path.join(test_data, "images")
+    expired_dir = os.path.join(test_data, "images.expired")
     for f in os.listdir(images_dir):
         for k in keep:
             if fnmatch.fnmatch(f, k):
@@ -513,7 +515,7 @@ def verify(head, config, is_master=False, clean=False):
                             os.putenv("TEST_OS", config['os'])
                             os.putenv("TEST_ARCH", config['arch'])
                             break
-                    os.putenv("TEST_DATA", "%s/cockpit-data/" % os.environ['HOME'])
+                    os.putenv("TEST_DATA", test_data)
                     os.putenv("TEST_JOBS", "4")
                     if clean:
                         cmd("./VERIFY", "--clean")
