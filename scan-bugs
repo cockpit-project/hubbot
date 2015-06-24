@@ -111,9 +111,13 @@ def bug_details(bug_entry):
     bug = { 'location': bug_entry[0],
             'url': bug_entry[1] }
     print "looking up bug %s" % (bug['url'])
-    html = subprocess.check_output ([ "curl", "-s", bug['url'] ])
-    bug['status'] = get_element_by_id("static_bug_status", html) or "Unknown"
-    bug['description'] = get_element_by_id("short_desc_nonedit_display", html) or bug_entry[1]
+    try:
+        html = subprocess.check_output ([ "curl", "-s", bug['url'] ])
+        bug['status'] = get_element_by_id("static_bug_status", html) or "Unknown"
+        bug['description'] = get_element_by_id("short_desc_nonedit_display", html) or bug_entry[1]
+    except:
+        bug['status'] = "(failed)"
+        bug['description'] = "(failed)"
     return bug
 
 def print_bugs(title, bugs):
