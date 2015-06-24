@@ -1232,9 +1232,6 @@ def print_usage():
 if dry_run:
     print "hubbot dry run"
 
-expire_images()
-exit(0)
-
 # make sure we have status images
 generate_status_images()
 
