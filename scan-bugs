@@ -202,7 +202,7 @@ with tempdir() as working_directory:
 
     # get bugzilla links
     uniq = subprocess.Popen(["uniq"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    grep = subprocess.Popen([ "grep", "-rEo", "(http|https)://bugzilla[\da-z./?A-Z0-9\D=_-]*", "test"], stdout=uniq.stdin)
+    grep = subprocess.Popen([ "grep", "-rEo", "(http|https)://(bugzilla|bugs)[\da-z./?A-Z0-9\D=_-]*", "test" ], stdout=uniq.stdin)
     data = uniq.communicate()[0].split("\n")
     grep.wait()
 
@@ -210,5 +210,3 @@ with tempdir() as working_directory:
                   filter(lambda e: len(e) is 2 and e[1],
                   map(lambda e: e.split(":", 1), data)))
     publish_bugs(bug_status_output, bugs)
-
-
