@@ -191,7 +191,7 @@ def publish_bugs(dest_filename, bugs):
 </html>
 """
     with open(dest_filename, "w") as out_file:
-        out_file.write(header + print_bugs('bugzilla', bugs) + footer)
+        out_file.write(header + print_bugs('Bugs', bugs) + footer)
 
 with tempdir() as working_directory:
     os.chdir(working_directory)
