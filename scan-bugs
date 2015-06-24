@@ -28,7 +28,7 @@ import sys
 import HTMLParser
 
 master_repo = 'cockpit-project/cockpit'
-bug_status_output = "%s/bug_status.html" % os.environ['HOME']
+bug_status_output = "%s/hubbot/bug_status.html" % os.environ['HOME']
 
 class IDParser(HTMLParser.HTMLParser):
     def __init__(self, id):
