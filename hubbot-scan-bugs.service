@@ -1,0 +1,11 @@
+[Unit]
+Description=Hubbot Bug Scanning
+
+[Service]
+ExecStart=/usr/local/bin/scan-bugs
+User=hubbot
+Restart=always
+RestartSec=1h
+
+[Install]
+WantedBy=multi-user.target
