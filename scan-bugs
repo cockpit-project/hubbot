@@ -140,7 +140,7 @@ def print_bugs(title, bugs):
 """ % (title)
     for bug in bugs:
         text = text + """
-          <tr class="%s">
+          <tr>
             <td>%(location)s</td>
             <td><a href="%(url)s">%(description)s</a></td>
             <td>%(status)s</td>
