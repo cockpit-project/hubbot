@@ -112,8 +112,8 @@ def bug_details(bug_entry):
             'url': bug_entry[1] }
     print "looking up bug %s" % (bug['url'])
     html = subprocess.check_output ([ "curl", "-s", bug['url'] ])
-    bug['status'] = get_element_by_id("static_bug_status", html)
-    bug['description'] = get_element_by_id("short_desc_nonedit_display", html)
+    bug['status'] = get_element_by_id("static_bug_status", html) or "Unknown"
+    bug['description'] = get_element_by_id("short_desc_nonedit_display", html) or bug_entry[1]
     return bug
 
 def print_bugs(title, bugs):
