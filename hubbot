@@ -922,6 +922,7 @@ def publish_status(extended_info):
 
   <body>
     <h1>Status at: %s UTC</h1>
+    <a href="bug_status.html">(Bug status)</a>
 """ % (datetime.datetime.utcnow())
     footer = """
     <!-- Bootstrap core JavaScript
