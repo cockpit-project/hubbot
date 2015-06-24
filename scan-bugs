@@ -30,6 +30,13 @@ import HTMLParser
 master_repo = 'cockpit-project/cockpit'
 bug_status_output = "%s/hubbot/bug_status.html" % os.environ['HOME']
 
+location_blacklist = [
+    "./pkg/base1/jquery.js",
+    "./pkg/kubernetes/angular.js",
+    "./tools/qunit.js",
+    "./test/sizzle.js"
+]
+
 class IDParser(HTMLParser.HTMLParser):
     def __init__(self, id):
         self.id = id
@@ -211,6 +218,6 @@ with tempdir() as working_directory:
     grep.wait()
 
     bugs = map(lambda b: bug_details(b),
-                  filter(lambda e: len(e) is 2 and e[1],
-                  map(lambda e: e.split(":", 1), data)))
+               filter(lambda e: len(e) is 2 and e[1] and not e[0] in location_blacklist,
+                      map(lambda e: e.split(":", 1), data)))
     publish_bugs(bug_status_output, bugs)
