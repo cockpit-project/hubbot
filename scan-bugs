@@ -34,7 +34,8 @@ location_blacklist = [
     "./pkg/base1/jquery.js",
     "./pkg/kubernetes/angular.js",
     "./tools/qunit.js",
-    "./test/sizzle.js"
+    "./test/sizzle.js",
+    "./doc/guide/gtk-doc.xsl"
 ]
 
 class IDParser(HTMLParser.HTMLParser):
