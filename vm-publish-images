@@ -1,0 +1,68 @@
+#! /bin/bash
+
+SELF=vm-publish-images
+
+targetdir=/srv/testdata/images
+
+TEST_DATA=${TEST_DATA:-$PWD}
+
+warning()
+{
+	echo >&2 "$SELF: $@"
+}
+
+silent()
+{
+	"$@" > /dev/null 2> /dev/null
+	return $?
+}
+
+set -eu
+
+publishable () {
+    [ -f "$1" ] && (echo $1 | grep -q -v rhel-7)
+}
+
+maybe_publish () {
+    checksum_file=$1
+
+    if [ -f "$targetdir/$checksum_file" ]; then
+      return
+    fi
+
+    cat "$checksum_file" | while read sum file; do
+        echo Publishing $file
+        pv "$file" | xz -ze >"$targetdir/$file.xz"
+    done
+    cp "$checksum_file" "$targetdir/$checksum_file"
+}
+
+maybe_unpublish () {
+    checksum_file=$1
+
+    if [ -f "$TEST_DATA/images/$checksum_file" ]; then
+      return
+    fi
+
+    cat "$checksum_file" | while read sum file; do
+        echo Unpublishing $file
+        rm $file.xz
+    done
+    rm "$checksum_file"
+}
+
+cd "$TEST_DATA/images"
+
+for f in *-checksum; do
+    if publishable "$f"; then
+      maybe_publish "$f"
+    fi
+done
+
+cd "$targetdir"
+
+for f in *-checksum; do
+    if publishable "$f"; then
+      maybe_unpublish "$f"
+    fi
+done
