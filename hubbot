@@ -118,8 +118,7 @@ os_arch_configurations = [{'os': 'fedora-22',
                            'short': 'f22',
                            'arch': 'x86_64',
                            'offset_master': 20,
-                           'offset_pull': 20,
-                           'publish_images': True
+                           'offset_pull': 20
                           },
                           {'os': 'rhel-7',
                            'short': 'r7',
@@ -132,22 +131,19 @@ os_arch_configurations = [{'os': 'fedora-22',
                            'short': 'fraw',
                            'arch': 'x86_64',
                            'offset_master': 10,
-                           'offset_pull': 0,
-                           'publish_images': True
+                           'offset_pull': 0
                           },
                           {'os': 'fedora-atomic-22',
                            'short': 'f22-atomic',
                            'arch': 'x86_64',
                            'offset_master': 10,
-                           'offset_pull': 0,
-                           'publish_images': True
+                           'offset_pull': 0
                           },
                           {'os': 'fedora-22-testing',
                            'short': 'f22-t',
                            'arch': 'x86_64',
                            'offset_master': 10,
-                           'offset_pull': 0,
-                           'publish_images': True
+                           'offset_pull': 0
                           }
                          ]
 default_arch_config = os_arch_configurations[0]
@@ -625,8 +621,8 @@ def verify(head, config, is_master=False, clean=False):
                 sha_in_file_matches = n_sha and (n_sha == sha)
                 if (info_is_current and sha_in_file_matches) or not info_is_current:
                     set_build_status(status_context, 'failed')
-        if not dry_run and 'publish_images' in config and config['publish_images']:
-            subprocess.check_call([ "%s/vm-publish-image" % topdir ])
+        if not dry_run:
+            subprocess.check_call([ "%s/vm-publish-images" % topdir ])
         if not is_master:
             load_persistent()
         # mark as not running
