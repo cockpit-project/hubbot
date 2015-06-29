@@ -90,6 +90,12 @@ os_arch_configurations = [{'os': 'fedora-22',
                            'offset_pull': 0,
                            'publish_images': True
                           },
+                          {'os': 'rhel-7',
+                           'short': 'r7',
+                           'arch': 'x86_64',
+                           'offset_master': -1,
+                           'offset_pull': 2
+                          },
                           {'os': 'fedora-rawhide',
                            'short': 'fraw',
                            'arch': 'x86_64',
@@ -106,11 +112,13 @@ os_arch_configurations = [{'os': 'fedora-22',
                            'noauto': True,
                            'publish_images': True
                           },
-                          {'os': 'rhel-7',
-                           'short': 'r7',
+                          {'os': 'fedora-22-testing',
+                           'short': 'f22-t',
                            'arch': 'x86_64',
-                           'offset_master': -1,
-                           'offset_pull': 2
+                           'offset_master': 0,
+                           'offset_pull': 0,
+                           'noauto': True,
+                           'publish_images': True
                           }
                          ]
 default_arch_config = os_arch_configurations[0]
