@@ -407,12 +407,15 @@ def expire_images():
     images_dir = os.path.join(test_data, "images")
     expired_dir = os.path.join(test_data, "images.expired")
     for f in os.listdir(images_dir):
+        remove = True
         for k in keep:
             if fnmatch.fnmatch(f, k):
-                return
-        trace("Expiring %s" % f)
-        if not dry_run:
-            shutil.move(os.path.join(images_dir, f), expired_dir)
+                remove = False
+                break
+        if remove:
+            trace("Expiring %s" % f)
+            if not dry_run:
+                shutil.move(os.path.join(images_dir, f), expired_dir)
 
 def cmd(*args):
     print "+", " ".join(list(args))
