@@ -104,7 +104,8 @@ os_arch_configurations = [{'os': 'fedora-22',
                            'short': 'r7',
                            'arch': 'x86_64',
                            'offset_master': 20,
-                           'offset_pull': 20
+                           'offset_pull': 20,
+                           'publish_images': False
                           },
                           {'os': 'fedora-rawhide',
                            'short': 'fraw',
