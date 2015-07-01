@@ -58,17 +58,17 @@ if 'keep_work_dirs' in config:
     keep_work_dirs = config['keep_work_dirs']
 
 priority_default = 0
-priority_needs_attention = 1
-priority_work_in_progress = 2
+priority_needs_attention = -1
+priority_work_in_progress = -2
 
-# if something gets tested by a non-default configuration, add this to priority
-priority_penalty_other_config = 1
+# this is the priority for pull requests when master has changed
+# tags and other modifiers will be ignored
+priority_master_changed = 1
 
-# this is added to priority for checks on master, stacks with priority_penalty_other_config
-priority_penalty_master = 1
-
-# this is added to pulls if they are checked again due to changed master
-priority_penalty_master_changed = 2
+# if an essential check has failed, other checks get this new priority
+# only affects pull requests
+# tags and other modifiers will be ignored
+priority_essential_failed = 2
 
 if 'priority_default' in config:
     priority_default = config['priority_default']
@@ -76,48 +76,55 @@ if 'priority_needs_attention' in config:
     priority_needs_attention = config['priority_needs_attention']
 if 'priority_work_in_progress' in config:
     priority_work_in_progress = config['priority_work_in_progress']
-if 'priority_penalty_other_config' in config:
-    priority_penalty_other_config = config['priority_penalty_other_config']
-if 'priority_penalty_master' in config:
-    priority_penalty_master = config['priority_penalty_master']
-if 'priority_penalty_master_changed' in config:
-    priority_penalty_master_changed = config['priority_penalty_master_changed']
+if 'priority_master_changed' in config:
+    priority_master_changed = config['priority_master_changed']
+if 'priority_essential_failed' in config:
+    priority_essential_failed = config['priority_essential_failed']
+
+""" priority:
+  <=  0: disabled, pull requests: only with special tag
+         with special tag: same as essential
+  <= 10: non-essential, pull requests: status only visible once started, run when hubbot is idle
+  <= 20: essential
+"""
+priority_threshold_disabled = 0
+priority_threshold_non_essential = 10
+priority_threshold_essential = 20
+
+priority_triggered = priority_threshold_essential
 
 os_arch_configurations = [{'os': 'fedora-22',
                            'short': 'f22',
                            'arch': 'x86_64',
-                           'offset_master': 0,
-                           'offset_pull': 0,
+                           'offset_master': 20,
+                           'offset_pull': 20,
                            'publish_images': True
                           },
                           {'os': 'rhel-7',
                            'short': 'r7',
                            'arch': 'x86_64',
-                           'offset_master': -1,
-                           'offset_pull': 2
+                           'offset_master': 20,
+                           'offset_pull': 20
                           },
                           {'os': 'fedora-rawhide',
                            'short': 'fraw',
                            'arch': 'x86_64',
-                           'offset_master': 0,
+                           'offset_master': 10,
                            'offset_pull': 0,
-                           'noauto': True,
                            'publish_images': True
                           },
                           {'os': 'fedora-atomic-22',
                            'short': 'f22-atomic',
                            'arch': 'x86_64',
-                           'offset_master': 0,
+                           'offset_master': 10,
                            'offset_pull': 0,
-                           'noauto': True,
                            'publish_images': True
                           },
                           {'os': 'fedora-22-testing',
                            'short': 'f22-t',
                            'arch': 'x86_64',
-                           'offset_master': 0,
+                           'offset_master': 10,
                            'offset_pull': 0,
-                           'noauto': True,
                            'publish_images': True
                           }
                          ]
@@ -146,11 +153,12 @@ status_message_master_changed = 'Hubbot was happy but will do this again because
 
 """
 master is stored via 'config' keys
-  last_successful_master[config] should contain ['sha', 'status', 'comment', 'committed-timestamp', 'hubbot_link'] or None
+  last_successful_master[config] should contain ['sha', 'status', 'comment', 'checked-timestamp', 'committed-timestamp', 'hubbot_link'] or None
 e.g. last_successful_master['hubbot/r7/x86-64'] = {
         'sha': 'c89a9e1eb5611671258dbff950d463bd8e39cf99',
         'status': 'finished',
         'comment': 'passed',
+        'checked-timestamp': '2015-04-01T16:30:52Z',
         'committed-timestamp': '2015-04-01T16:00:49Z',
         'hubbot_link': 'http://files.cockpit-project.org/hubbot/c89a9e1eb5611671258dbff950d463bd8e39cf99/hubbot.html'
     }
@@ -548,6 +556,7 @@ def verify(head, config, is_master=False, clean=False):
                 last_master[status_context] = { 'sha': sha,
                                                 'status': 'finished',
                                                 'comment': 'passed',
+                                                'checked-timestamp': datetime.datetime.now().isoformat(),
                                                 'committed-timestamp': commit_date,
                                                 'hubbot_link': wd.url
                                               }
@@ -578,6 +587,7 @@ def verify(head, config, is_master=False, clean=False):
                 last_master[status_context] = { 'sha': sha,
                                                 'status': 'finished',
                                                 'comment': 'failed',
+                                                'checked-timestamp': datetime.datetime.now().isoformat(),
                                                 'committed-timestamp': commit_date,
                                                 'hubbot_link': wd.url
                                               }
@@ -617,9 +627,12 @@ def status_is_success(status):
 def status_is_pending(status):
     return status['state'] == 'pending' or status['description'] == status_message_master_changed or status['description'] == "Hubbot will get to this eventually"
 
-# returns (pull_status, 'comment', priority_change)
+def status_is_failed(status):
+    return status['state'] == 'error'
+
+# returns (pull_status, 'comment', priority)
 # the priority change only describes the changes during this call (e.g. marked a pull as pending)
-def consider_head(head, master, status_context, status_data):
+def consider_head(head, master, status_context, status_data, priority):
     for s in status_data['statuses']:
         if s['context'] == status_context:
             if status_is_success(s):
@@ -630,30 +643,30 @@ def consider_head(head, master, status_context, status_data):
                                                                   "description": status_message_master_changed,
                                                                   "target_url": s['target_url'],
                                                                   "context": status_context })
-                    return (pull_status_pending, 'already passed, but master changed', priority_penalty_master_changed)
+                    return (pull_status_pending, 'already passed, but master changed', priority_master_changed)
                 else:
                     trace("%s already verified" % head['label'])
-                    return (pull_status_finished, 'passed', 0)
+                    return (pull_status_finished, 'passed', priority)
             elif s['description'] == status_message_master_changed:
-                return (pull_status_pending, 'already passed, but master changed', 0)
+                return (pull_status_pending, 'already passed, but master changed', priority_master_changed)
             elif s['state'] == 'error':
                 trace("%s needs verification (error)" % head['label'])
-                return (pull_status_pending, '', 0)
+                return (pull_status_pending, '', priority)
             elif status_is_pending(s):
                 trace("%s needs verification (pending)" % head['label'])
                 if (s['description'] == status_message_running):
-                    return (pull_status_running, '', 0)
-                return (pull_status_pending, '', 0)
+                    return (pull_status_running, '', priority)
+                return (pull_status_pending, '', priority)
             elif s['description'] == "Hubbot needs help with rebasing":
-                return (pull_status_finished, 'failed, needs rebase', 0)
+                return (pull_status_finished, 'failed, needs rebase', priority)
             else:
                 trace("%s already failed" % head['label'])
-                return (pull_status_finished, 'failed', 0)
+                return (pull_status_finished, 'failed', priority)
     trace("%s needs verification (new)" % head['label'])
     set_github_status(master_repo, head['sha'], { "state": "pending" if not new_style else "success",
                                                   "description": "Hubbot will get to this eventually",
                                                   "context": status_context })
-    return (pull_status_pending, '', 0)
+    return (pull_status_pending, '', priority)
 
 def get_user_html(url):
     user_info = github_get_authenticated(url)
@@ -967,11 +980,13 @@ def publish_status(extended_info):
 
 def get_sorted_pulls():
     pulls = github_get("pulls")
-    # Pulls with a lower priority will be checked first
+    # Pulls with a higher priority will be checked first
     viable_pulls = [ ];
     for p in pulls:
         priority = priority_default
         p_labels = None
+
+        # apply wip/needsattention modifiers first
         if p['title'].lower().startswith('wip'):
             priority = priority_work_in_progress
         else:
@@ -980,38 +995,65 @@ def get_sorted_pulls():
             for l in p_labels:
                 if l['name'] in ['needswork', 'needsdesign']:
                     priority = priority_needs_attention
+
         # get status data for the pull
         status = github_get("commits/%s/status" % p['head']['sha'])
+
+        # first check to see if an essential check has already failed
+        essential_failed = False
         for config in os_arch_configurations:
+            if essential_failed:
+                break
             status_context = status_context_from_config(config)
             priority_offset = config['offset_pull']
-            if config != default_arch_config:
-                priority_offset += priority_penalty_other_config
+            # base priority must be high enough
+            if priority_offset < priority_threshold_essential:
+                continue
+
+            for s in status['statuses']:
+                if s['context'] == status_context and status_is_failed(s):
+                    essential_failed = True
+                    priority = priority_essential_failed
+                    priority_offset = 0
+                    break
+
+        for config in os_arch_configurations:
+            status_context = status_context_from_config(config)
+            config_priority = priority
+            priority_offset = config['offset_pull']
+
+            triggered = False
+
             for s in status['statuses']:
                 if s['context'] == status_context:
-                    if status_is_pending(s) and s['description'] == status_message_master_changed:
-                        priority_offset += priority_penalty_master_changed
+                    if not p_labels:
+                        p_labels = github_get("issues/%s/labels" % p['number'])
+                    for l in p_labels:
+                        if l['name'] == ('hubbot:%s:check' % config['short']):
+                            triggered = True
+                            if not essential_failed:
+                                config_priority += priority_triggered
+                                priority_offset = 0
+                            break
+
+                    if status_is_pending(s) and priority_essential_failed:
+                        config_priority = priority_essential_failed
+                        priority_offset = 0
+                    elif s['description'] == status_message_master_changed:
+                        config_priority = priority_master_changed
+                        priority_offset = 0
                     break
-            no_auto = 'noauto' in config and config['noauto']
-            triggered = False
-            if no_auto:
-                if not p_labels:
-                    p_labels = github_get("issues/%s/labels" % p['number'])
-                for l in p_labels:
-                    if l['name'] == ('hubbot:%s:check' % config['short']):
-                        triggered = True
-                        break
+
             viable_pulls.append({'data': p,
-                                 'priority': priority+priority_offset,
+                                 'priority': config_priority+priority_offset,
                                  'config': status_context,
                                  'config_data': config,
                                  'status_data': status,
-                                 'noauto': no_auto,
                                  'triggered': triggered
                                  })
 
     # sort by priority
-    return sorted(viable_pulls, key=lambda x: x['priority'])
+    return sorted(viable_pulls, key=lambda x: x['priority'], reverse=True)
 
 def consider_master(master, get_only=False):
     master_sha = master['commit']['sha']
@@ -1021,9 +1063,7 @@ def consider_master(master, get_only=False):
     viable_checks = []
     for config in os_arch_configurations:
         status_context = status_context_from_config(config)
-        priority = config['offset_master'] + priority_default + priority_penalty_master
-        if config != default_arch_config:
-            priority += priority_penalty_other_config
+        priority = config['offset_master'] + priority_default
         entry = {'data': master,
                  'priority': priority,
                  'pull_status': pull_status_pending,
@@ -1062,7 +1102,7 @@ def consider_master(master, get_only=False):
 
         # if there was no status, then this is new and needs to be marked as pending
         # master can't be manually forced, so we don't need to check trigger_labels
-        if not status_found and not get_only and not ('noauto' in config and config['noauto']):
+        if not status_found and not get_only:
             # pending, no comment is default: no need to update entry
             trace("master needs verification for config %s" % status_context)
             set_github_status(master_repo, master_sha, { "state": "pending" if not new_style else "success",
@@ -1073,7 +1113,7 @@ def consider_master(master, get_only=False):
 
 
     # sort by priority
-    return sorted(viable_checks, key=lambda x: x['priority'])
+    return sorted(viable_checks, key=lambda x: x['priority'], reverse=True)
 
 def scan_pulls():
     global timestamp_master_fetched
@@ -1110,20 +1150,20 @@ def scan_pulls():
                                   'status_data': pull_info['status_data']
                                  })
             continue
-        if pull_info['noauto'] and not pull_info['triggered']:
-            trace("no %s autobuilds for %s" % (pull_info['config'], p['head']['label']))
+        if pull_info['priority'] <= priority_threshold_disabled:
+            trace("%s skipped for %s (low priority)" % (pull_info['config'], p['head']['label']))
             extended_info.append({'data': p,
                                   'priority': pull_info['priority'],
                                   'pull_status': pull_status_skip,
-                                  'comment': 'no autobuilds',
+                                  'comment': 'skipped due to low priority',
                                   'is_pull': True,
                                   'config': pull_info['config'],
                                   'status_data': pull_info['status_data']
                                  })
             continue
-        (pull_status, pull_comment, priority_change) = consider_head(p['head'], master_sha, pull_info['config'], pull_info['status_data'])
+        (pull_status, pull_comment, pull_info['priority']) = consider_head(p['head'], master_sha, pull_info['config'], pull_info['status_data'], pull_info['priority'])
         extended_info.append({'data': p,
-                              'priority': pull_info['priority'] + priority_change,
+                              'priority': pull_info['priority'],
                               'pull_status': pull_status,
                               'comment': pull_comment,
                               'is_pull': True,
@@ -1134,7 +1174,7 @@ def scan_pulls():
     if master_info:
         extended_info.extend(master_info)
         # sort by priority
-        extended_info = sorted(extended_info, key=lambda x: x['priority'])
+        extended_info = sorted(extended_info, key=lambda x: x['priority'], reverse=True)
     publish_status(extended_info)
 
 def head_is_pending(head, status_context):
@@ -1151,8 +1191,8 @@ def verify_pull(pull):
     config = default_arch_config
     github_visible_commits = None
     if pull == "-":
-        # initialize priority to highest number (lowest priority)
-        priority = sys.maxsize
+        # initialize priority to lowest number (lowest priority)
+        priority = -sys.maxint-1
         pulls = get_sorted_pulls()
         github_visible_commits = map(lambda p: p['data']['head']['sha'], pulls)
         # use first pending pull in sorted list
@@ -1174,7 +1214,7 @@ def verify_pull(pull):
             if info['pull_status'] != pull_status_pending:
                 continue
             # we need to be of a higher priority than the pull request
-            if info['data'] is None or info['priority'] >= priority:
+            if info['data'] is None or info['priority'] <= priority:
                 continue
             data = info['data']
             priority = info['priority']
