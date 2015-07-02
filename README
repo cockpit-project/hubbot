@@ -30,22 +30,23 @@ Put something like this into $HOME/.hubbotrc:
       'os_arch': [{'os': 'fedora-22',
                    'short': 'f22',
                    'arch': 'x86_64',
-                   'offset_master': 0,
-                   'offset_pull': 0
+                   'offset_master': 20,
+                   'offset_pull': 20,
+                   'publish_images': True
                   },
                   {'os': 'rhel-7',
                    'short': 'r7',
                    'arch': 'x86_64',
-                   'offset_master': -1,
-                   'offset_pull': 2
+                   'offset_master': 20,
+                   'offset_pull': 20,
+                   'publish_images': False
                   }
                  ],
       'priority_default': 0,
-      'priority_needs_attention': 1,
-      'priority_work_in_progress': 2,
-      'priority_penalty_other_config': 1,
-      'priority_penalty_master': 1,
-      'priority_penalty_master_changed': 2
+      'priority_needs_attention': -1,
+      'priority_work_in_progress': -2,
+      'priority_master_changed': 1,
+      'priority_essential_failed': 2,
     }
 
 'dry_run' if this is true, no changes are pushed to github.
@@ -64,18 +65,20 @@ whereas the short name is used for status messages.
 configuration.
 The first entry is used by default if no configuration is specified
 via command line.
+If 'publish_images' is set to True, images will be made available for public
+download automatically.
 
 Priorities:
 By default, all tasks are assigned priority_default.
 For pull requests, the github labels and title are considered:
     priority_needs_attention (labels "needsdesign", "needswork")
     priority_work_in_progress (title begins with WIP, case insensitive)
-When checking master, priority_penalty_master is added.
-When checking a pull again because master has changed,
-priority_penalty_master_changed is added.
-When using a non-default configuration, priority_penalty_other_config is added.
-The penalties priority_penalty_master, priority_penalty_master_changed and
-priority_penalty_other_config stack.
+Master is checked daily with the configuration's respective priority.
+When checking a pull again because master has changed, its priority is set
+to priority_master_changed, ignoring all other modifiers.
+If an essential check (base priority >= 20) for a pull request has failed,
+other checks for the same pull request will be set to a lower priority:
+priority_essential_failed.
 
 The github_token is used to access the GitHub API.  You can create one
 for your account at
