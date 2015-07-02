@@ -84,8 +84,8 @@ if 'priority_essential_failed' in config:
 """ priority:
   <=  0: disabled, pull requests: only with special tag
          with special tag: same as essential
-  <= 10: non-essential, pull requests: status only visible once started, run when hubbot is idle
-  <= 20: essential
+  >= 10: non-essential, pull requests: status only visible once started, run when hubbot is idle
+  >= 20: essential
 """
 priority_threshold_disabled = 0
 priority_threshold_non_essential = 10
