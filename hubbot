@@ -518,7 +518,8 @@ def verify(head, config, is_master=False, clean=False):
         if 'committer' in head['commit']['commit'] and 'date' in head['commit']['commit']['committer']:
             commit_date = head['commit']['commit']['committer']['date']
     with WorkDir("%s_%s" % (sha, status_context.replace('/', '_'))) as wd:
-        print "starting verify at %s" % (datetime.datetime.now().isoformat())
+        start_time = datetime.datetime.now().isoformat()
+        print "starting verify at %s" % (start_time)
         print "configuration: %s" % (status_context)
         load_persistent()
         global last_master
@@ -529,7 +530,8 @@ def verify(head, config, is_master=False, clean=False):
                       'config': status_context,
                       'is_master': is_master,
                       'sha': sha,
-                      'hubbot_link': wd.url
+                      'hubbot_link': wd.url,
+                      'start_time': start_time
                     }
         running_jobs.append(run_entry)
         store_persistent()
@@ -634,6 +636,15 @@ def verify(head, config, is_master=False, clean=False):
         # mark as not running
         while run_entry in running_jobs:
             running_jobs.remove(run_entry)
+        # clean up previous entries in case of crash
+        for entry in running_jobs:
+            # if it doesn't have a start_time, it's old => remove it
+            if not 'start_time' in entry:
+                running_jobs.remove(entry)
+            job_start_time = dateutil.parser.parse(entry['start_time'])
+            # if it's older than 2 hours, remove
+            if (job_start_time + datetime.timedelta(hours=2)) <= datetime.datetime.now():
+                running_jobs.remove(entry)
         store_persistent()
 
 def master_from_status(status):
