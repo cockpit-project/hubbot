@@ -518,6 +518,8 @@ def verify(head, config, is_master=False, clean=False):
         if 'committer' in head['commit']['commit'] and 'date' in head['commit']['commit']['committer']:
             commit_date = head['commit']['commit']['committer']['date']
     with WorkDir("%s_%s" % (sha, status_context.replace('/', '_'))) as wd:
+        print "starting verify at %s" % (datetime.datetime.now().isoformat())
+        print "configuration: %s" % (status_context)
         load_persistent()
         global last_master
         global last_successful_master
