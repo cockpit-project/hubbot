@@ -417,6 +417,11 @@ def expire_work_dirs(github_visible_commits):
                 shutil.rmtree(d)
 
 def expire_images():
+    images_dir = os.path.join(test_data, "images")
+    expired_dir = os.path.join(test_data, "images.expired")
+    if not os.path.exists(images_dir):
+        return
+
     keep = { }
 
     def keep_image(flavor, os_, tag):
@@ -438,8 +443,6 @@ def expire_images():
                     print "error reading %s" % c
                     pass
 
-    images_dir = os.path.join(test_data, "images")
-    expired_dir = os.path.join(test_data, "images.expired")
     for f in os.listdir(images_dir):
         remove = True
         for k in keep:
@@ -622,7 +625,7 @@ def verify(head, config, is_master=False, clean=False):
                 sha_in_file_matches = n_sha and (n_sha == sha)
                 if (info_is_current and sha_in_file_matches) or not info_is_current:
                     set_build_status(status_context, 'failed')
-        if 'publish_images' in config and config['publish_images']:
+        if not dry_run and 'publish_images' in config and config['publish_images']:
             subprocess.check_call([ "vm-publish-image" ])
         if not is_master:
             load_persistent()
