@@ -34,6 +34,8 @@ import datetime
 import dateutil.parser
 import fnmatch
 
+topdir = os.path.normpath(os.path.dirname(__file__))
+
 dry_run = False
 verbose = False
 tail_log = False
@@ -359,7 +361,7 @@ class WorkDir(object):
         if not dry_run:
             self.oldcwd = os.getcwd()
             os.chdir(self.path)
-            self.log = subprocess.Popen("hublog2html >hubbot.html", stdin=subprocess.PIPE, shell=True, bufsize=0)
+            self.log = subprocess.Popen("'%s/hublog2html' >hubbot.html" % topdir, stdin=subprocess.PIPE, shell=True, bufsize=0)
             if tail_log:
                 self.tail = subprocess.Popen([ "tail", "-f", "hubbot.log" ])
             else:
@@ -624,7 +626,7 @@ def verify(head, config, is_master=False, clean=False):
                 if (info_is_current and sha_in_file_matches) or not info_is_current:
                     set_build_status(status_context, 'failed')
         if not dry_run and 'publish_images' in config and config['publish_images']:
-            subprocess.check_call([ "vm-publish-image" ])
+            subprocess.check_call([ "%s/vm-publish-image" % topdir ])
         if not is_master:
             load_persistent()
         # mark as not running
