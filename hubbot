@@ -985,17 +985,19 @@ def get_sorted_pulls():
     viable_pulls = [ ];
     for p in pulls:
         priority = priority_default
-        p_labels = None
+        testable = p['head']['user']['login'] in user_whitelist
+        p_labels = github_get("issues/%s/labels" % p['number'])
 
-        # apply wip/needsattention modifiers first
+        # check labels
+        for l in p_labels:
+            if l['name'] in ['needswork', 'needsdesign']:
+                priority = priority_needs_attention
+            if l['name'] == 'testable':
+                testable = True
+
+        # apply wip/needsattention modifiers
         if p['title'].lower().startswith('wip'):
             priority = priority_work_in_progress
-        else:
-            # check labels
-            p_labels = github_get("issues/%s/labels" % p['number'])
-            for l in p_labels:
-                if l['name'] in ['needswork', 'needsdesign']:
-                    priority = priority_needs_attention
 
         # get status data for the pull
         status = github_get("commits/%s/status" % p['head']['sha'])
@@ -1027,8 +1029,6 @@ def get_sorted_pulls():
 
             for s in status['statuses']:
                 if s['context'] == status_context:
-                    if not p_labels:
-                        p_labels = github_get("issues/%s/labels" % p['number'])
                     for l in p_labels:
                         if l['name'] == ('hubbot:%s:check' % config['short']):
                             triggered = True
@@ -1050,7 +1050,8 @@ def get_sorted_pulls():
                                  'config': status_context,
                                  'config_data': config,
                                  'status_data': status,
-                                 'triggered': triggered
+                                 'triggered': triggered,
+                                 'testable': testable
                                  })
 
     # sort by priority
@@ -1120,8 +1121,8 @@ def scan_pulls():
     extended_info = []
     for pull_info in pulls:
         p = pull_info['data']
-        if p['head']['user']['login'] not in user_whitelist:
-            trace("%s not in whitelist" % p['head']['user']['login'])
+        if not pull_info['testable']:
+            trace("%s not testable, %s not in whitelist" % (pull_info['config'], p['head']['user']['login']))
             extended_info.append({'data': p,
                                   'priority': pull_info['priority'],
                                   'pull_status': pull_status_skip,
