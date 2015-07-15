@@ -33,7 +33,6 @@ import time
 import datetime
 import dateutil.parser
 import fnmatch
-from lib import timeoutcall
 
 dry_run = False
 verbose = False
@@ -76,11 +75,6 @@ if 'remote' in config:
 
 if 'keep_work_dirs' in config:
     keep_work_dirs = config['keep_work_dirs']
-
-# timeout for verify calls in seconds
-verify_timeout = 60*60
-if 'verify_timeout' in config:
-    verify_timeout = config['verify_timeout']
 
 priority_default = 0
 priority_needs_attention = -1
@@ -564,7 +558,7 @@ def verify(head, config, is_master=False, clean=False):
                 if new_style:
                     os.putenv("GUESTOS", "fedora22-cockpit")
                     os.putenv("GUEST_NUMBER", "22")
-                    timeoutcall.run_check(["./VERIFY.new"], timeout=verify_timeout)
+                    cmd("./VERIFY.new")
                 else:
                     os.putenv("TEST_OS", default_os)
                     os.putenv("TEST_ARCH", default_arch)
@@ -576,9 +570,9 @@ def verify(head, config, is_master=False, clean=False):
                     os.putenv("TEST_DATA", test_data)
                     os.putenv("TEST_JOBS", "4")
                     if clean:
-                        timeoutcall.run_check(["./VERIFY", "--clean"], timeout=verify_timeout)
+                        cmd("./VERIFY", "--clean")
                     else:
-                        timeoutcall.run_check(["./VERIFY"], timeout=verify_timeout)
+                        cmd("./VERIFY")
             set_github_status(master_repo, sha, { "state": "success",
                                                   "description": "Hubbot is happy",
                                                   "target_url": wd.url,
