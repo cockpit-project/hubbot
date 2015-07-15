@@ -1,4 +1,23 @@
-#! /usr/bin/python
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+"""
+This file is part of Hubbot.
+
+Copyright (C) 2015 Red Hat, Inc.
+
+Hubbot is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Hubbot is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Hubbot.  If not, see <http://www.gnu.org/licenses/>
+"""
 
 import subprocess
 import json
@@ -14,6 +33,7 @@ import time
 import datetime
 import dateutil.parser
 import fnmatch
+from lib import timeoutcall
 
 dry_run = False
 verbose = False
@@ -56,6 +76,11 @@ if 'remote' in config:
 
 if 'keep_work_dirs' in config:
     keep_work_dirs = config['keep_work_dirs']
+
+# timeout for verify calls in seconds
+verify_timeout = 60*60
+if 'verify_timeout' in config:
+    verify_timeout = config['verify_timeout']
 
 priority_default = 0
 priority_needs_attention = -1
@@ -392,6 +417,11 @@ def expire_work_dirs(github_visible_commits):
                 shutil.rmtree(d)
 
 def expire_images():
+    images_dir = os.path.join(test_data, "images")
+    expired_dir = os.path.join(test_data, "images.expired")
+    if not os.path.exists(images_dir):
+        return
+
     keep = { }
 
     def keep_image(flavor, os_, tag):
@@ -413,8 +443,6 @@ def expire_images():
                     print "error reading %s" % c
                     pass
 
-    images_dir = os.path.join(test_data, "images")
-    expired_dir = os.path.join(test_data, "images.expired")
     for f in os.listdir(images_dir):
         remove = True
         for k in keep:
@@ -490,6 +518,9 @@ def verify(head, config, is_master=False, clean=False):
         if 'committer' in head['commit']['commit'] and 'date' in head['commit']['commit']['committer']:
             commit_date = head['commit']['commit']['committer']['date']
     with WorkDir("%s_%s" % (sha, status_context.replace('/', '_'))) as wd:
+        start_time = datetime.datetime.now().isoformat()
+        print "starting verify at %s" % (start_time)
+        print "configuration: %s" % (status_context)
         load_persistent()
         global last_master
         global last_successful_master
@@ -499,7 +530,8 @@ def verify(head, config, is_master=False, clean=False):
                       'config': status_context,
                       'is_master': is_master,
                       'sha': sha,
-                      'hubbot_link': wd.url
+                      'hubbot_link': wd.url,
+                      'start_time': start_time
                     }
         running_jobs.append(run_entry)
         store_persistent()
@@ -532,7 +564,7 @@ def verify(head, config, is_master=False, clean=False):
                 if new_style:
                     os.putenv("GUESTOS", "fedora22-cockpit")
                     os.putenv("GUEST_NUMBER", "22")
-                    cmd("./VERIFY.new")
+                    timeoutcall.run_check(["./VERIFY.new"], timeout=verify_timeout)
                 else:
                     os.putenv("TEST_OS", default_os)
                     os.putenv("TEST_ARCH", default_arch)
@@ -544,9 +576,9 @@ def verify(head, config, is_master=False, clean=False):
                     os.putenv("TEST_DATA", test_data)
                     os.putenv("TEST_JOBS", "4")
                     if clean:
-                        cmd("./VERIFY", "--clean")
+                        timeoutcall.run_check(["./VERIFY", "--clean"], timeout=verify_timeout)
                     else:
-                        cmd("./VERIFY")
+                        timeoutcall.run_check(["./VERIFY"], timeout=verify_timeout)
             set_github_status(master_repo, sha, { "state": "success",
                                                   "description": "Hubbot is happy",
                                                   "target_url": wd.url,
@@ -597,13 +629,22 @@ def verify(head, config, is_master=False, clean=False):
                 sha_in_file_matches = n_sha and (n_sha == sha)
                 if (info_is_current and sha_in_file_matches) or not info_is_current:
                     set_build_status(status_context, 'failed')
-        if 'publish_images' in config and config['publish_images']:
+        if not dry_run and 'publish_images' in config and config['publish_images']:
             subprocess.check_call([ "vm-publish-image" ])
         if not is_master:
             load_persistent()
         # mark as not running
         while run_entry in running_jobs:
             running_jobs.remove(run_entry)
+        # clean up previous entries in case of crash
+        for entry in running_jobs:
+            # if it doesn't have a start_time, it's old => remove it
+            if not 'start_time' in entry:
+                running_jobs.remove(entry)
+            job_start_time = dateutil.parser.parse(entry['start_time'])
+            # if it's older than 2 hours, remove
+            if (job_start_time + datetime.timedelta(hours=2)) <= datetime.datetime.now():
+                running_jobs.remove(entry)
         store_persistent()
 
 def master_from_status(status):
@@ -847,58 +888,56 @@ def print_master_details(extended_info):
             if config_job['comment']:
                 commit_comment += ": " + config_job['comment']
 
-            # get status, filtered by entries that concern us
+            # status for master is from persistent data
             if 'status_data' in config_job:
                 status = config_job['status_data']
             else:
-                status = github_get("commits/%s/status" % (job_sha))
-            if status and status['statuses']:
-                status = filter(lambda s: s['context'] == status_context and
-                                          'hubbot' in "%s" % (s['target_url']),
-                                status['statuses'])
-            if status:
+                status = None
+
+            if status and 'hubbot_link' in status:
                 # most recent entry will be first
-                hubbot_link = "<a href=\"%s\">hubbot output</a>" % (status[0]['target_url'])
+                hubbot_link = "<a href=\"%s\">hubbot output</a>" % (status['hubbot_link'])
                 commit_comment += " (%s)" % (hubbot_link)
 
             entries.append((job_class, status_context, commit_link, commit_date, config_job['pull_status'], commit_comment))
 
-            # if current master hasn't passed or is still pending, get info on the last checked master
-            if config_job['comment'] != "passed" or config_job['pull_status'] == pull_status_pending:
+            is_successful = (config_job['comment'] == 'passed')
+            # if current master is still pending, get info on the last checked master
+            if config_job['pull_status'] == pull_status_pending:
                 if not status_context in last_master or not last_master[status_context]:
                     entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'last successful master'))
                 else:
                     last_info = last_master[status_context]
-                    # print this job if it's not the same as head
-                    if last_info['sha'] != job_sha:
-                        job_class = determine_job_class(last_info['status'], last_info['comment'])
-                        commit_link = "<a href=\"%s\">%s</a>" % (
-                            os.path.join("https://github.com", master_repo, "commit", last_info['sha']),
-                            last_info['sha']
-                            )
-                        commit_comment = "last checked master"
-                        if last_info['comment']:
-                            commit_comment += ": " + last_info['comment']
-                        if last_info['hubbot_link']:
-                            commit_comment += " (<a href=\"%s\">hubbot output</a>)" % last_info['hubbot_link']
-                        entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
-                    # if last check wasn't successful, try to show last successful run
-                    if last_info['comment'] != "passed":
-                        if not status_context in last_successful_master or not last_successful_master[status_context]:
-                            entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'last successful master'))
-                        else:
-                            last_info = last_successful_master[status_context]
-                            job_class = determine_job_class(last_info['status'], last_info['comment'])
-                            commit_link = "<a href=\"%s\">%s</a>" % (
-                                os.path.join("https://github.com", master_repo, "commit", last_info['sha']),
-                                last_info['sha']
-                                )
-                            commit_comment = "last successful master"
-                            if last_info['comment']:
-                                commit_comment += ": " + last_info['comment']
-                            if last_info['hubbot_link']:
-                                commit_comment += " (<a href=\"%s\">hubbot output</a>)" % last_info['hubbot_link']
-                            entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
+                    job_class = determine_job_class(last_info['status'], last_info['comment'])
+                    commit_link = "<a href=\"%s\">%s</a>" % (
+                        os.path.join("https://github.com", master_repo, "commit", last_info['sha']),
+                        last_info['sha']
+                        )
+                    commit_comment = "last checked master"
+                    if last_info['comment']:
+                        commit_comment += ": " + last_info['comment']
+                    if last_info['hubbot_link']:
+                        commit_comment += " (<a href=\"%s\">hubbot output</a>)" % last_info['hubbot_link']
+                    entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
+                    is_successful = (last_info['comment'] == 'passed')
+
+            # if last check wasn't successful, try to show last successful run
+            if not is_successful:
+                if not status_context in last_successful_master or not last_successful_master[status_context]:
+                    entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'last successful master'))
+                else:
+                    last_info = last_successful_master[status_context]
+                    job_class = determine_job_class(last_info['status'], last_info['comment'])
+                    commit_link = "<a href=\"%s\">%s</a>" % (
+                        os.path.join("https://github.com", master_repo, "commit", last_info['sha']),
+                        last_info['sha']
+                        )
+                    commit_comment = "last successful master"
+                    if last_info['comment']:
+                        commit_comment += ": " + last_info['comment']
+                    if last_info['hubbot_link']:
+                        commit_comment += " (<a href=\"%s\">hubbot output</a>)" % last_info['hubbot_link']
+                    entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
 
     for entry in entries:
         text = text + """
@@ -1062,7 +1101,8 @@ def consider_master(master, get_only=False):
     if not last_master:
         load_persistent()
     master_sha = master['commit']['sha']
-    status = github_get("commits/%s/status" % (master_sha))
+    # we don't need to load github status here, since master checks are performed daily
+    # this is independent of whether master changed since the last check
 
     # consider all configurations
     viable_checks = []
@@ -1076,20 +1116,24 @@ def consider_master(master, get_only=False):
                  'is_pull': False,
                  'config': status_context,
                  'config_data': config,
-                 'status_data': status
+                 'status_data': None
                 }
         # see if we already checked master for this config on this day
+        # if so, get info on last checked master
         if status_context in last_master:
             last_check = last_master[status_context]
             if 'checked-timestamp' in last_check:
                 check_timestamp = dateutil.parser.parse(last_check['checked-timestamp'])
-                if check_timestamp.date() == datetime.datetime.now().date():
-                    entry['pull_status'] = pull_status_skip
-                    entry['comment'] = 'master already checked today'
+                if check_timestamp.date() >= datetime.datetime.now().date():
+                    """ already checked for today """
+                    entry['pull_status'] = pull_status_finished
+                    entry['comment'] = last_check['comment']
+                    entry['status_data'] = last_check
 
         if priority < priority_threshold_disabled:
             entry['comment'] = 'skipped due to low priority'
             entry['pull_status'] = pull_status_skip
+            set_build_status(status_context, 'skipped')
         if entry['pull_status'] == pull_status_pending:
             set_build_status(status_context, 'pending')
         viable_checks.append(entry)
@@ -1232,7 +1276,8 @@ def generate_status_images():
                             'failed': 'red',
                             'pending': 'yellow',
                             'running': 'blue',
-                            'unknown': 'lightgrey'
+                            'unknown': 'lightgrey',
+                            'skipped': 'lightgrey'
                           }
     if not os.path.exists(status_images_path):
         cmd("mkdir", "-p", status_images_path)

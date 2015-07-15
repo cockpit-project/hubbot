@@ -26,7 +26,8 @@ Put something like this into $HOME/.hubbotrc:
       'master_repo': "cockpit-project/cockpit",
       'dry_run': False,
       'remote': False,
-      'keep_work_dirs': 30
+      'keep_work_dirs': 30,
+      'verify_timeout': 3600,
       'os_arch': [{'os': 'fedora-22',
                    'short': 'f22',
                    'arch': 'x86_64',
