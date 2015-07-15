@@ -1064,7 +1064,7 @@ def get_sorted_pulls():
             for s in status['statuses']:
                 if s['context'] == status_context:
                     for l in p_labels:
-                        if l['name'] == ('hubbot:%s:check' % config['short']):
+                        if l['name'] == ('check:%s' % config['short']):
                             triggered = True
                             if not essential_failed:
                                 config_priority += priority_triggered
@@ -1260,7 +1260,7 @@ def verify_pull(pull):
     else:
         labels = github_get("issues/%s/labels" % data['number'])
         for l in labels:
-            if l['name'] == ("hubbot:%s:clean" % config['short']):
+            if l['name'] == ("clean:%s" % config['short']):
                 clean = True
                 break
         trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
