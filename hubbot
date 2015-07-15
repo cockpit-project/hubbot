@@ -635,10 +635,11 @@ def verify(head, config, is_master=False, clean=False):
             # if it doesn't have a start_time, it's old => remove it
             if not 'start_time' in entry:
                 running_jobs.remove(entry)
-            job_start_time = dateutil.parser.parse(entry['start_time'])
-            # if it's older than 2 hours, remove
-            if (job_start_time + datetime.timedelta(hours=2)) <= datetime.datetime.now():
-                running_jobs.remove(entry)
+            else:
+                job_start_time = dateutil.parser.parse(entry['start_time'])
+                # if it's older than 2 hours, remove
+                if (job_start_time + datetime.timedelta(hours=2)) <= datetime.datetime.now():
+                    running_jobs.remove(entry)
         store_persistent()
 
 def master_from_status(status):
