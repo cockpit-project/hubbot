@@ -37,7 +37,7 @@ import fnmatch
 topdir = os.path.normpath(os.path.dirname(__file__))
 
 dry_run = False
-verbose = False
+verbose = True
 tail_log = False
 
 new_style = False
@@ -1037,8 +1037,6 @@ def get_sorted_pulls():
         # first check to see if an essential check has already failed
         essential_failed = False
         for config in os_arch_configurations:
-            if essential_failed:
-                break
             status_context = status_context_from_config(config)
             priority_offset = config['offset_pull']
             # base priority must be high enough
@@ -1046,36 +1044,43 @@ def get_sorted_pulls():
                 continue
 
             for s in status['statuses']:
-                if s['context'] == status_context and status_is_failed(s):
-                    essential_failed = True
-                    priority = priority_essential_failed
-                    priority_offset = 0
+                if s['context'] == status_context:
+                    # only check the first (newest) occurrence of status_context
+                    if status_is_failed(s):
+                        essential_failed = True
+                        priority = priority_essential_failed
                     break
 
+        # now check each available config to see if it's viable to be checked
         for config in os_arch_configurations:
             status_context = status_context_from_config(config)
             config_priority = priority
             priority_offset = config['offset_pull']
 
             triggered = False
-
-            for s in status['statuses']:
-                if s['context'] == status_context:
-                    for l in p_labels:
-                        if l['name'] == ('check:%s' % config['short']):
-                            triggered = True
-                            if not essential_failed:
-                                config_priority += priority_triggered
-                                priority_offset = 0
-                            break
-
-                    if status_is_pending(s) and priority_essential_failed:
-                        config_priority = priority_essential_failed
-                        priority_offset = 0
-                    elif s['description'] == status_message_master_changed:
-                        config_priority = priority_master_changed
-                        priority_offset = 0
+            trigger_label = "check:%s" % config['short']
+            for l in p_labels:
+                if l['name'] == trigger_label:
+                    triggered = True
+                    # if we manually trigger, make sure to always test this
+                    config_priority = priority_triggered
+                    priority_offset = 0
                     break
+
+            # only consider changing priority if we didn't trigger via label
+            if not triggered:
+                for s in status['statuses']:
+                    if s['context'] == status_context:
+                        if status_is_pending(s) and priority_essential_failed:
+                            config_priority = priority_essential_failed
+                            priority_offset = 0
+                        elif s['description'] == status_message_master_changed:
+                            config_priority = priority_master_changed
+                            priority_offset = 0
+                        break
+
+            if essential_failed and not triggered:
+                continue
 
             viable_pulls.append({'data': p,
                                  'priority': config_priority+priority_offset,
