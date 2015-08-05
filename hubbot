@@ -1071,7 +1071,7 @@ def get_sorted_pulls():
             if not triggered:
                 for s in status['statuses']:
                     if s['context'] == status_context:
-                        if status_is_pending(s) and priority_essential_failed:
+                        if status_is_pending(s) and essential_failed:
                             config_priority = priority_essential_failed
                             priority_offset = 0
                         elif s['description'] == status_message_master_changed:
