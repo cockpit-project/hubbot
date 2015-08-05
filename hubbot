@@ -144,6 +144,12 @@ os_arch_configurations = [{'os': 'fedora-22',
                            'arch': 'x86_64',
                            'offset_master': 10,
                            'offset_pull': 0
+                          },
+                          {'os': 'fedora-23',
+                           'short': 'f23',
+                           'arch': 'x86_64',
+                           'offset_master': 10,
+                           'offset_pull': 0
                           }
                          ]
 default_arch_config = os_arch_configurations[0]
