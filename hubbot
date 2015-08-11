@@ -574,9 +574,9 @@ def verify(head, config, is_master=False, clean=False):
                     os.putenv("TEST_DATA", test_data)
                     os.putenv("TEST_JOBS", "4")
                     if clean:
-                        cmd("./VERIFY", "--clean")
+                        cmd("timeout", "60m", "./VERIFY", "--clean")
                     else:
-                        cmd("./VERIFY")
+                        cmd("timeout", "30m", "./VERIFY")
             set_github_status(master_repo, sha, { "state": "success",
                                                   "description": "Hubbot is happy",
                                                   "target_url": wd.url,
