@@ -576,7 +576,7 @@ def verify(head, config, is_master=False, clean=False):
                     if clean:
                         cmd("timeout", "60m", "./VERIFY", "--clean")
                     else:
-                        cmd("timeout", "30m", "./VERIFY")
+                        cmd("timeout", "60m", "./VERIFY")
             set_github_status(master_repo, sha, { "state": "success",
                                                   "description": "Hubbot is happy",
                                                   "target_url": wd.url,
