@@ -855,8 +855,7 @@ def print_master_details(extended_info):
         <thead>
           <tr>
             <th>Configuration</th>
-            <th>OS</th>
-            <th>Status</th>
+            <th>OS / Status</th>
             <th>Comment</th>
           </tr>
         </thead>
@@ -894,7 +893,7 @@ def print_master_details(extended_info):
                 pull_status = 'unknown'
 
             # don't use the symlink here, since we want the info to match the time of the scan
-            config_status = "<img src=\"%s/%s-%s-%s.svg?master\" alt=\"%s\"></img>" % (status_images_url, config['short'], config['arch'], config_job['pull_status'], pull_status)
+            config_status = "<img src=\"%s/%s-%s-%s.svg?master\" alt=\"%s - %s\"></img>" % (status_images_url, config['short'], config['arch'], pull_status, config['os'], pull_status)
 
             # status for master is from persistent data
             if 'status_data' in config_job:
@@ -907,12 +906,11 @@ def print_master_details(extended_info):
                 hubbot_link = "<a href=\"%s\">hubbot output</a>" % (status['hubbot_link'])
                 commit_comment += " (%s)" % (hubbot_link)
 
-            entries.append((status_context, config['os'], config_status, commit_comment))
+            entries.append((status_context, config_status, commit_comment))
 
     for entry in entries:
         text = text + """
           <tr>
-            <td>%s</td>
             <td>%s</td>
             <td>%s</td>
             <td>%s</td>
