@@ -894,7 +894,7 @@ def print_master_details(extended_info):
                 pull_status = 'unknown'
 
             # don't use the symlink here, since we want the info to match the time of the scan
-            config_status = "<img src=\"%s/%s-%s-%s.svg?master\" alt=\"%s\"></img>" % (status_images_url, config['short'], config['arch'], config_job['pull_status'], pull_status)
+            config_status = "<img src=\"%s/%s-%s-%s.svg?master\" alt=\"%s\"></img>" % (status_images_url, config['short'], config['arch'], pull_status, pull_status)
 
             # status for master is from persistent data
             if 'status_data' in config_job:
