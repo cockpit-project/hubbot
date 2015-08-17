@@ -451,7 +451,7 @@ def expire_images():
         if remove:
             trace("Expiring %s" % f)
             if not dry_run:
-                shutil.move(os.path.join(images_dir, f), expired_dir)
+                os.remove(os.path.join(images_dir, f))
 
 def cmd(*args):
     print "+", " ".join(list(args))
