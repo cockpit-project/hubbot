@@ -59,6 +59,7 @@ current_master_filename = os.path.join(work, "hubbot.current_master")
 timestamp_master_fetched = None
 
 status_images_path = os.path.join(work, "status-images")
+status_images_url = os.path.join(work_url, "status-images")
 
 config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
@@ -854,8 +855,7 @@ def print_master_details(extended_info):
         <thead>
           <tr>
             <th>Configuration</th>
-            <th>Commit</th>
-            <th>Commit date</th>
+            <th>OS</th>
             <th>Status</th>
             <th>Comment</th>
           </tr>
@@ -874,18 +874,27 @@ def print_master_details(extended_info):
         else:
             config_job = config_job[0]
             job_sha = config_job['data']['commit']['sha']
-            job_class = determine_job_class(config_job['pull_status'], config_job['comment'])
-            commit_link = "<a href=\"%s\">%s</a>" % (
-                os.path.join("https://github.com", master_repo, "commit", job_sha),
-                job_sha
-                )
-            commit_date = ""
-            commit_data = config_job['data']['commit']['commit']
-            if 'committer' in commit_data and 'date' in commit_data['committer']:
-                commit_date = commit_data['committer']['date']
+
             commit_comment = "current master"
             if config_job['comment']:
                 commit_comment += ": " + config_job['comment']
+
+            pull_status = config_job['pull_status']
+
+            if pull_status == pull_status_running:
+                pull_status = 'running'
+            elif pull_status == pull_status_finished:
+                if 'passed' in commit_comment:
+                    pull_status = 'passed'
+                elif 'failed' in commit_comment:
+                    pull_status = 'failed'
+            elif pull_status == pull_status_pending:
+                pull_status = 'pending'
+            else:
+                pull_status = 'unknown'
+
+            # don't use the symlink here, since we want the info to match the time of the scan
+            config_status = "<img src=\"%s/%s-%s-%s.svg?master\" alt=\"%s\"></img>" % (status_images_url, config['short'], config['arch'], config_job['pull_status'], pull_status)
 
             # status for master is from persistent data
             if 'status_data' in config_job:
@@ -898,50 +907,11 @@ def print_master_details(extended_info):
                 hubbot_link = "<a href=\"%s\">hubbot output</a>" % (status['hubbot_link'])
                 commit_comment += " (%s)" % (hubbot_link)
 
-            entries.append((job_class, status_context, commit_link, commit_date, config_job['pull_status'], commit_comment))
-
-            is_successful = (config_job['comment'] == 'passed')
-            # if current master is still pending, get info on the last checked master
-            if config_job['pull_status'] == pull_status_pending:
-                if not status_context in last_master or not last_master[status_context]:
-                    entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'last successful master'))
-                else:
-                    last_info = last_master[status_context]
-                    job_class = determine_job_class(last_info['status'], last_info['comment'])
-                    commit_link = "<a href=\"%s\">%s</a>" % (
-                        os.path.join("https://github.com", master_repo, "commit", last_info['sha']),
-                        last_info['sha']
-                        )
-                    commit_comment = "last checked master"
-                    if last_info['comment']:
-                        commit_comment += ": " + last_info['comment']
-                    if last_info['hubbot_link']:
-                        commit_comment += " (<a href=\"%s\">hubbot output</a>)" % last_info['hubbot_link']
-                    entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
-                    is_successful = (last_info['comment'] == 'passed')
-
-            # if last check wasn't successful, try to show last successful run
-            if not is_successful:
-                if not status_context in last_successful_master or not last_successful_master[status_context]:
-                    entries.append(('', status_context, 'unknown', 'unknown', 'unknown', 'last successful master'))
-                else:
-                    last_info = last_successful_master[status_context]
-                    job_class = determine_job_class(last_info['status'], last_info['comment'])
-                    commit_link = "<a href=\"%s\">%s</a>" % (
-                        os.path.join("https://github.com", master_repo, "commit", last_info['sha']),
-                        last_info['sha']
-                        )
-                    commit_comment = "last successful master"
-                    if last_info['comment']:
-                        commit_comment += ": " + last_info['comment']
-                    if last_info['hubbot_link']:
-                        commit_comment += " (<a href=\"%s\">hubbot output</a>)" % last_info['hubbot_link']
-                    entries.append((job_class, status_context, commit_link, last_info['committed-timestamp'], last_info['status'], commit_comment))
+            entries.append((status_context, config['os'], config_status, commit_comment))
 
     for entry in entries:
         text = text + """
-          <tr class="%s">
-            <td>%s</td>
+          <tr>
             <td>%s</td>
             <td>%s</td>
             <td>%s</td>
