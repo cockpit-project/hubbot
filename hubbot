@@ -854,6 +854,7 @@ def print_master_details(extended_info):
         <thead>
           <tr>
             <th>Configuration</th>
+            <th>OS</th>
             <th>Status</th>
             <th>Comment</th>
           </tr>
@@ -888,11 +889,12 @@ def print_master_details(extended_info):
                 hubbot_link = "<a href=\"%s\">hubbot output</a>" % (status['hubbot_link'])
                 commit_comment += " (%s)" % (hubbot_link)
 
-            entries.append((job_class, status_context, config_job['pull_status'], commit_comment))
+            entries.append((job_class, status_context, config['os'], config_job['pull_status'], commit_comment))
 
     for entry in entries:
         text = text + """
           <tr class="%s">
+            <td>%s</td>
             <td>%s</td>
             <td>%s</td>
             <td>%s</td>
