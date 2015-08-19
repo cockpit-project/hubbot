@@ -79,6 +79,12 @@ if 'remote' in config:
 if 'keep_work_dirs' in config:
     keep_work_dirs = config['keep_work_dirs']
 
+# store all tags for all available configurations
+check_tags = True
+if 'check_tags' in config:
+    check_tags = config['check_tags']
+
+
 priority_default = 0
 priority_needs_attention = -1
 priority_work_in_progress = -2
@@ -503,10 +509,13 @@ def add_comment(issue, message):
     else:
         print "+++ %s" % message
 
-def verify(head, config, is_master=False, clean=False):
+def verify(head, config, is_master=False, is_tagged=False, clean=False):
     status_context = status_context_from_config(config)
 
-    if not is_master:
+    if is_tagged:
+        sha = head['sha']
+        rebase_done = True
+    elif not is_master:
         pull_repo = head['repo']['full_name']
         ref = head['ref']
         sha = head['sha']
@@ -544,7 +553,12 @@ def verify(head, config, is_master=False, clean=False):
                 set_build_status(status_context, 'running')
             if not dry_run:
                 git("init")
-                if not is_master:
+                if is_master or is_tagged:
+                    git("fetch", "https://github.com/%s.git" % master_repo, "master")
+                    git("checkout", "FETCH_HEAD")
+                    # make sure we test exactly the specified revision, maybe someone pushed a new commit in the interim
+                    git("reset", "--hard", sha)
+                else:
                     git("fetch", "https://github.com/%s.git" % pull_repo, ref)
                     branch = git_output("rev-parse", "FETCH_HEAD").strip()
                     git("checkout", "FETCH_HEAD")
@@ -554,11 +568,6 @@ def verify(head, config, is_master=False, clean=False):
                         master_file.write("%s\n" % master)
                     git("rebase", "FETCH_HEAD")
                     rebase_done = True
-                else:
-                    git("fetch", "https://github.com/%s.git" % master_repo, "master")
-                    git("checkout", "FETCH_HEAD")
-                    # make sure we test exactly the specified revision, maybe someone pushed a new commit in the interim
-                    git("reset", "--hard", sha)
 
                 if new_style:
                     os.putenv("GUESTOS", "fedora22-cockpit")
@@ -772,36 +781,41 @@ def print_jobs_table(title, jobs):
                 user_login = "<a href=\"%s\">%s</a>" % (user_html, user_login)
             sha = head['sha']
         else:
-            m = job['data']
-            if m['commit']:
+            c = None
+
+            if 'tagged' in job['comment']:
+                c = job['data']
+                job_desc = "<a href=\"%s\">tagged version '%s'</a>" % (c['html_url'], job['tagged_data']['name'])
+            else:
+                m = job['data']
                 c = m['commit']
-                if c['sha']:
-                    sha = m['commit']['sha']
-                if c['author'] and c['author']['login']:
-                    user_login = c['author']['login']
-                    if user_login in user_pages:
-                        user_html = user_pages[user_login]
-                    else:
-                        user_html = get_user_html(c['author']['url'])
-                    if user_html:
-                        user_login = "<a href=\"%s\">%s</a>" % (user_html, user_login)
-                    else:
-                        user_login = c['author']['login']
-                if c['committer'] and c['committer']['login']:
-                    committer_login = c['committer']['login']
-                    if committer_login in user_pages:
-                        user_html = user_pages[committer_login]
-                    else:
-                        user_html = get_user_html(c['committer']['url'])
-                    if user_html:
-                        user_login += " (committed by <a href=\"%s\">%s</a>)" % (user_html, committer_login)
-                    else:
-                        user_login += " (committed by %s)" % (committer_login)
                 if m['_links'] and m['_links']['html']:
                     job_desc = "<a href=\"%s\">master</a>" % (m['_links']['html'])
                 else:
                     job_desc = 'master'
-            pass
+
+            if c['sha']:
+                sha = c['sha']
+            if c['author'] and c['author']['login']:
+                user_login = c['author']['login']
+                if user_login in user_pages:
+                    user_html = user_pages[user_login]
+                else:
+                    user_html = get_user_html(c['author']['url'])
+                if user_html:
+                    user_login = "<a href=\"%s\">%s</a>" % (user_html, user_login)
+                else:
+                    user_login = c['author']['login']
+            if c['committer'] and c['committer']['login']:
+                committer_login = c['committer']['login']
+                if committer_login in user_pages:
+                    user_html = user_pages[committer_login]
+                else:
+                    user_html = get_user_html(c['committer']['url'])
+                if user_html:
+                    user_login += " (committed by <a href=\"%s\">%s</a>)" % (user_html, committer_login)
+                else:
+                    user_login += " (committed by %s)" % (committer_login)
 
         status_context = job['config']
         comment = job['comment']
@@ -1068,6 +1082,40 @@ def get_sorted_pulls():
     # sort by priority
     return sorted(viable_pulls, key=lambda x: x['priority'], reverse=True)
 
+def consider_tagged():
+    global check_tags, priority_default
+    # check the last tagged commit
+    if not check_tags:
+        return []
+
+    tags = github_get("tags")
+    if len(tags) < 1:
+        return []
+
+    tagged = tags[0]
+    tagged_data = github_get("commits/%s" % tagged['commit']['sha'])
+    # get status data for the tagged commit
+    status = github_get("commits/%s/status" % tagged['commit']['sha'])
+    # consider all configurations
+    viable_checks = []
+    for config in os_arch_configurations:
+        status_context = status_context_from_config(config)
+        priority = config['offset_master'] + priority_default
+        entry = {'data': tagged_data,
+         'priority': priority,
+         'pull_status': pull_status_pending,
+         'comment': 'tagged version ' + tagged['name'],
+         'is_pull': False,
+         'config': status_context,
+         'config_data': config,
+         'tagged_data': tagged,
+         'status_data': status
+        }
+        viable_checks.append(entry)
+
+    # sort by priority
+    return sorted(viable_checks, key=lambda x: x['priority'], reverse=True)
+
 def consider_master(master, get_only=False):
     global last_master
     if not last_master:
@@ -1171,8 +1219,11 @@ def scan_pulls():
     master_info = consider_master(master)
     if master_info:
         extended_info.extend(master_info)
-        # sort by priority
-        extended_info = sorted(extended_info, key=lambda x: x['priority'], reverse=True)
+    tagged_info = consider_tagged()
+    if tagged_info:
+        extended_info.extend(tagged_info)
+    # sort by priority
+    extended_info = sorted(extended_info, key=lambda x: x['priority'], reverse=True)
     publish_status(extended_info)
 
 def head_is_pending(head, status_context):
@@ -1186,6 +1237,7 @@ def verify_pull(pull):
     global timestamp_master_fetched
     data = None
     is_master_check = False
+    is_tagged_check = False
     config = default_arch_config
     github_visible_commits = None
     if pull == "-":
@@ -1219,6 +1271,19 @@ def verify_pull(pull):
             is_master_check = True
             config = info['config_data']
 
+        # consider tags
+        tagged_info = consider_tagged()
+        for info in tagged_info:
+            if info['pull_status'] != pull_status_pending:
+                continue
+            # we need to be of a higher priority than the pull request
+            if info['data'] is None or info['priority'] <= priority:
+                continue
+            data = info['data']
+            priority = info['priority']
+            is_tagged_check = True
+            config = info['config_data']
+
         if data is None:
             trace("No verifications pending")
             return
@@ -1233,7 +1298,11 @@ def verify_pull(pull):
     if is_master_check:
         clean = True
         trace("Verifying master for config %s%s" % (status_context_from_config(config), " (cleanly)" if clean else ""))
-        verify(data, config, True, clean)
+        verify(data, config, True, False, clean)
+    elif is_tagged_check:
+        clean = True
+        trace("Verifying tagged version for config %s%s" % (status_context_from_config(config), " (cleanly)" if clean else ""))
+        verify(data, config, False, True, clean)
     else:
         labels = github_get("issues/%s/labels" % data['number'])
         for l in labels:
@@ -1241,7 +1310,7 @@ def verify_pull(pull):
                 clean = True
                 break
         trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
-        verify(data['head'], config, False, clean)
+        verify(data['head'], config, False, False, clean)
 
 def generate_status_images():
     status_color_combos = { 'passed': 'brightgreen',
