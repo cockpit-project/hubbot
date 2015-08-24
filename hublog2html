@@ -29,10 +29,6 @@ function wrap() {
     cat <(echo $1) - <(echo $2)
 }
 
-function linkify() {
-    sed -u -e "s,$1\(.*\),<a href=\"$2\\1\">\\0</a>,"
-}
-
 function style() {
     sed -u -e "s,$1,<span style=\"$2\">\\0</span>,g"
 }
@@ -41,4 +37,8 @@ function linkimages() {
     sed -u -e "s,\\([a-zA-Z0-9-]*\\)FAIL.png,<a href=\"test/\\1FAIL.png\">\\1FAIL.png</a>,g"
 }
 
-txt2html | wrap "$HEAD" "$FOOT" | linkify "$HOME/avocado/" "$HOME/avocado/" | style PASS color:green | style FAILED color:red | linkimages
+function linkmock() {
+    sed -u -e "s,See logs for output\\.,<a href=\"mock\">\\0</a>,"
+}
+
+txt2html | wrap "$HEAD" "$FOOT" | style PASS color:green | style FAILED color:red | linkimages | linkmock
