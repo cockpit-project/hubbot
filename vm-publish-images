@@ -25,17 +25,6 @@ targetdir=/srv/testdata/images
 
 TEST_DATA=${TEST_DATA:-$PWD}
 
-warning()
-{
-	echo >&2 "$SELF: $@"
-}
-
-silent()
-{
-	"$@" > /dev/null 2> /dev/null
-	return $?
-}
-
 set -eu
 
 publishable () {
