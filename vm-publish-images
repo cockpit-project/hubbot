@@ -42,18 +42,51 @@ publishable () {
     [ -f "$1" ] && (echo $1 | grep -q -v rhel-7)
 }
 
+make_sum() {
+    sha512sum "$1" | while read sum file; do
+        echo $sum
+    done
+}
+
+# Build an index in the virt-builder format
+index_lines() {
+    echo "$1" | sed -n 's/^\(.\+\)-\([^-]\+\)-\([0-9]\+\)\.\([^.]\+\)$/\1 \2 \3 \4/p' |
+        while read name arch release format; do
+
+            case "$format" in
+            img)
+                format=raw
+                ;;
+            qcow2)
+                ;;
+            *)
+                continue
+                ;;
+            esac
+
+            sum="$(make_sum "$targetdir/$2")"
+            printf "[%s-%s]\nname=%s\n" $name $release $name
+            printf "arch=%s\n" $arch
+            printf "file=%s\n" "$2"
+            printf "checksum=%s\n" "$sum"
+            printf "format=%s\n" $format
+            printf "size=%s\n" $(stat --printf="%s" "$1")
+            printf "compressed_size=%s\n" $(stat --printf="%s" "$targetdir/$2")
+            printf "\n"
+        done
+}
+
 maybe_publish () {
     checksum_file=$1
 
-    if [ -f "$targetdir/$checksum_file" ]; then
-      return
-    fi
-
     cat "$checksum_file" | while read sum file; do
-        echo Publishing $file
-        pv "$file" | xz -ze >"$targetdir/$file.xz"
+        if [ ! -f "$targetdir/$file.xz" ]; then
+            echo Publishing $file
+            pv "$file" | xz -ze >"$targetdir/$file.xz"
+        fi
+        cp "$checksum_file" "$targetdir/$checksum_file"
+        index_lines $file $file.xz >> "$targetdir/index"
     done
-    cp "$checksum_file" "$targetdir/$checksum_file"
 }
 
 maybe_unpublish () {
@@ -71,6 +104,7 @@ maybe_unpublish () {
 }
 
 cd "$TEST_DATA/images"
+rm -f "$targetdir/index"
 
 for f in *-checksum; do
     if publishable "$f"; then
