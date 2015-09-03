@@ -403,11 +403,27 @@ def expire_work_dirs(github_visible_commits):
         return
     # make sure we don't look at too many commits
     github_visible_commits = list(set(github_visible_commits))
-    def is_redundant_directory(dirname):
+
+    def splitname(dirname):
+        name, ext = os.path.splitext(dirname)
+        if len(ext) > 0:
+            n = int(ext[1:])
+        else:
+            n = 0
+        return name, n
+
+    keep = { }
+    for dirname in list_work_dirs():
         for c in github_visible_commits:
             if c in dirname:
-                return False
-        return True
+                name, n = splitname(dirname)
+                if name not in keep or keep[name] < n:
+                    keep[name] = n
+
+    def is_redundant_directory(dirname):
+        name, n = splitname(dirname)
+        return name not in keep or keep[name] != n
+
     dirs = filter (is_redundant_directory, list_work_dirs())
     if len(dirs) > keep_work_dirs:
         for d in dirs[0:len(dirs)-keep_work_dirs]:
