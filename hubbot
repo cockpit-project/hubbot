@@ -417,14 +417,17 @@ def expire_work_dirs(github_visible_commits):
 
 def expire_images():
     images_dir = os.path.join(test_data, "images")
-    if not os.path.exists(images_dir):
-        return
+    mock_config_dir = os.path.join(test_data, "mock")
 
-    keep = { }
+    kept_image_files = { }
+    kept_mock_configs = { }
 
     def keep_image(flavor, os_, tag):
-        keep["%s-%s-*-%s-checksum" % (flavor, os_, tag)] = True
-        keep["%s-%s-*-%s.*" % (flavor, os_, tag)] = True
+        kept_image_files["%s-%s-*-%s-checksum" % (flavor, os_, tag)] = True
+        kept_image_files["%s-%s-*-%s.*" % (flavor, os_, tag)] = True
+
+    def keep_mock(flavor, os_, tag):
+        kept_mock_configs["%s-*-%s-%s" % (os_, flavor, tag)] = True
 
     def process_conf_dir(sub):
         for d in list_work_dirs():
@@ -438,6 +441,7 @@ def expire_images():
                             tags = conf['tags']
                             for os_ in tags:
                                 keep_image (flavor, os_, tags[os_])
+                                keep_mock(flavor, os_, tags[os_])
                     except:
                         print "error reading %s" % c
                         pass
@@ -445,16 +449,35 @@ def expire_images():
     process_conf_dir("test")
     process_conf_dir("test/guest")
 
-    for f in os.listdir(images_dir):
-        remove = True
-        for k in keep:
-            if fnmatch.fnmatch(f, k):
-                remove = False
-                break
-        if remove:
-            trace("Expiring %s" % f)
-            if not dry_run:
-                os.remove(os.path.join(images_dir, f))
+    if os.path.exists(images_dir):
+        for f in os.listdir(images_dir):
+            remove = True
+            for k in kept_image_files:
+                if fnmatch.fnmatch(f, k):
+                    remove = False
+                    break
+            if remove:
+                trace("Expiring image file %s" % f)
+                if not dry_run:
+                    os.remove(os.path.join(images_dir, f))
+
+    if os.path.exists(mock_config_dir):
+        for f in os.listdir(mock_config_dir):
+            if not f.endswith(".cfg"):
+                continue
+            f = f[:-4]
+            if f == "site-defaults":
+                continue
+            remove = True
+            for k in kept_mock_configs:
+                if fnmatch.fnmatch(f, k):
+                    remove = False
+                    break
+            if remove:
+                trace("Expiring mock config %s" % f)
+                if not dry_run:
+                    subprocess.check_call([ "mock", "--configdir", mock_config_dir, "-r", f, "--scrub", "all" ])
+                    os.remove(os.path.join(mock_config_dir, f + ".cfg"))
 
 def cmd(*args):
     print "+", " ".join(list(args))
