@@ -443,7 +443,7 @@ def expire_images():
                                 keep_image (flavor, os_, tags[os_])
                                 keep_mock(flavor, os_, tags[os_])
                     except:
-                        print "error reading %s" % c
+                        print "error reading %s" % os.path.join(t, c)
                         pass
 
     process_conf_dir("test")
