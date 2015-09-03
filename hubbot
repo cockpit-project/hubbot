@@ -431,6 +431,9 @@ def expire_work_dirs(github_visible_commits):
             if not dry_run:
                 shutil.rmtree(d)
 
+    if not dry_run:
+        subprocess.check_call([ "find", work, "-type", "f", "-size", "+500M", "-exec", "rm", "{}", ";" ])
+
 def expire_images():
     images_dir = os.path.join(test_data, "images")
     if not os.path.exists(images_dir):
