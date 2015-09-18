@@ -350,14 +350,11 @@ def mk_exclusive_dir(path):
 class WorkDir(object):
     def __init__(self, name):
         name = name.replace('hubbot_', '')
-        i = 0
-        n = name
-        while not mk_exclusive_dir (os.path.join (work, n)):
-            i = i + 1
-            n = name + "." + str(i)
-        self.path = os.path.join (work, n)
+        self.path = os.path.join (work, name)
+        if not dry_run and os.path.isdir(self.path):
+            shutil.rmtree(self.path)
         if work_url:
-            self.url = os.path.join (work_url, n, "hubbot.html")
+            self.url = os.path.join (work_url, name, "hubbot.html")
 
     def __enter__(self):
         trace("Entering %s" % self.path)
