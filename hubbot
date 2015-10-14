@@ -482,7 +482,7 @@ def expire_images():
 
 def cmd(*args):
     print "+", " ".join(list(args))
-    subprocess.check_call(list(args), stdout=sys.stdout, stderr=sys.stderr)
+    subprocess.check_call(list(args), stdout=sys.stdout, stderr=sys.stderr, bufsize=0)
 
 def cmd_output(*args):
     return subprocess.check_output(list(args))
