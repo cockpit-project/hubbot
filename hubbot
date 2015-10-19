@@ -103,6 +103,11 @@ if 'priority_master_changed' in config:
 if 'priority_essential_failed' in config:
     priority_essential_failed = config['priority_essential_failed']
 
+# if something is labeled with "priority" in github, modify its priority by this
+priority_action = 5
+if 'priority_action' in config:
+    priority_action = config['priority_action']
+
 """ priority:
   <=  0: disabled, pull requests: only with special tag
          with special tag: same as essential
@@ -1021,15 +1026,19 @@ def get_sorted_pulls():
         testable = p['head']['user']['login'] in user_whitelist
         p_labels = github_get("issues/%s/labels" % p['number'])
 
+        is_priority_action = False
         # check labels
         for l in p_labels:
-            if l['name'] in ['needswork', 'needsdesign']:
+            if not is_priority_action and l['name'] in ['needswork', 'needsdesign']:
                 priority = priority_needs_attention
+            if l['name'] == 'priority':
+                is_priority_action = True
+                priority = priority_action
             if l['name'] == 'testable':
                 testable = True
 
         # apply wip/needsattention modifiers
-        if p['title'].lower().startswith('wip'):
+        if not is_priority_action and p['title'].lower().startswith('wip'):
             priority = priority_work_in_progress
 
         # get status data for the pull
@@ -1037,20 +1046,21 @@ def get_sorted_pulls():
 
         # first check to see if an essential check has already failed
         essential_failed = False
-        for config in os_arch_configurations:
-            status_context = status_context_from_config(config)
-            priority_offset = config['offset_pull']
-            # base priority must be high enough
-            if priority_offset < priority_threshold_essential:
-                continue
+        if not is_priority_action:
+            for config in os_arch_configurations:
+                status_context = status_context_from_config(config)
+                priority_offset = config['offset_pull']
+                # base priority must be high enough
+                if priority_offset < priority_threshold_essential:
+                    continue
 
-            for s in status['statuses']:
-                if s['context'] == status_context:
-                    # only check the first (newest) occurrence of status_context
-                    if status_is_failed(s):
-                        essential_failed = True
-                        priority = priority_essential_failed
-                    break
+                for s in status['statuses']:
+                    if s['context'] == status_context:
+                        # only check the first (newest) occurrence of status_context
+                        if status_is_failed(s):
+                            essential_failed = True
+                            priority = priority_essential_failed
+                        break
 
         # now check each available config to see if it's viable to be checked
         for config in os_arch_configurations:
