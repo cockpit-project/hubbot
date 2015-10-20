@@ -1033,18 +1033,18 @@ def get_sorted_pulls():
                 priority = priority_needs_attention
             if l['name'] == 'priority':
                 is_priority_action = True
-                priority = priority_action
             if l['name'] == 'testable':
                 testable = True
 
         # apply wip/needsattention modifiers
-        if not is_priority_action and p['title'].lower().startswith('wip'):
+        if p['title'].lower().startswith('wip'):
             priority = priority_work_in_progress
 
         # get status data for the pull
         status = github_get("commits/%s/status" % p['head']['sha'])
 
-        # first check to see if an essential check has already failed
+        # if we don't have a priority label, check to see if an essential
+        # check has already failed
         essential_failed = False
         if not is_priority_action:
             for config in os_arch_configurations:
@@ -1092,6 +1092,11 @@ def get_sorted_pulls():
 
             if essential_failed and not triggered:
                 continue
+
+            # change priority according to label only if previous rules allow
+            # a check to happen in the first place
+            if is_priority_action and (config_priority + priority_offset) >= priority_threshold_disabled:
+                config_priority += priority_action
 
             viable_pulls.append({'data': p,
                                  'priority': config_priority+priority_offset,
