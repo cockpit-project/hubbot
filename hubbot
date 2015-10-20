@@ -1095,7 +1095,7 @@ def get_sorted_pulls():
 
             # change priority according to label only if previous rules allow
             # a check to happen in the first place
-            if is_priority_action and (config_priority + priority_offset) >= priority_threshold_disabled:
+            if is_priority_action and (config_priority + priority_offset) > priority_threshold_disabled:
                 config_priority += priority_action
 
             viable_pulls.append({'data': p,
