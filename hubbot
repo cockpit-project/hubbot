@@ -361,7 +361,6 @@ def mk_exclusive_dir(path):
 
 class WorkDir(object):
     def __init__(self, name):
-        name = name.replace('hubbot_', '')
         self.path = os.path.join (work, name)
         if not dry_run and os.path.isdir(self.path):
             shutil.rmtree(self.path)
@@ -556,6 +555,7 @@ def verify(head, config, is_master=False, clean=False):
         if 'committer' in head['commit']['commit'] and 'date' in head['commit']['commit']['committer']:
             commit_date = head['commit']['commit']['committer']['date']
     work_id = "%s_%s" % (sha, status_context.replace('/', '_'))
+    work_id = work_id.replace('hubbot_', '')
     with WorkDir(work_id) as wd:
         start_time = datetime.datetime.now().isoformat()
         print "starting verify at %s" % (start_time)
@@ -668,8 +668,6 @@ def verify(head, config, is_master=False, clean=False):
                 sha_in_file_matches = n_sha and (n_sha == sha)
                 if (info_is_current and sha_in_file_matches) or not info_is_current:
                     set_build_status(status_context, 'failed')
-        if not dry_run:
-            maybe_upload_file("hubbot.html", "%s/hubbot.html" % work_id)
         if not dry_run and publish_images:
             subprocess.check_call([ "%s/vm-publish-images" % topdir ])
         if not is_master:
@@ -688,6 +686,7 @@ def verify(head, config, is_master=False, clean=False):
                 if (job_start_time + datetime.timedelta(hours=2)) <= datetime.datetime.now():
                     running_jobs.remove(entry)
         store_persistent()
+    maybe_upload_file("%s/%s/hubbot.html" % (work, work_id), "%s/hubbot.html" % work_id)
 
 def master_from_status(status):
     path = "%s/%s/hubbot.master" % (work, os.path.basename(os.path.dirname(status['target_url'])))
@@ -966,6 +965,7 @@ def print_master_details(extended_info):
 
 def maybe_upload_file(src, dst):
     if 'upload_cmd' in config:
+        print "uploading", src, dst
         subprocess.check_call(config['upload_cmd'] % { 'src': src, 'dst': dst }, shell=True)
 
 # Publish scan info in html format
