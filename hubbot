@@ -66,6 +66,9 @@ config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 github_token = config['github_token']
 user_whitelist = config['user_whitelist']
 
+if 'work_url' in config:
+    work_url = config['work_url']
+
 master_repo = 'cockpit-project/cockpit'
 if 'master_repo' in config:
     master_repo = config['master_repo']
