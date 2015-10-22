@@ -555,7 +555,8 @@ def verify(head, config, is_master=False, clean=False):
         commit_date = ""
         if 'committer' in head['commit']['commit'] and 'date' in head['commit']['commit']['committer']:
             commit_date = head['commit']['commit']['committer']['date']
-    with WorkDir("%s_%s" % (sha, status_context.replace('/', '_'))) as wd:
+    work_id = "%s_%s" % (sha, status_context.replace('/', '_'))
+    with WorkDir(work_id) as wd:
         start_time = datetime.datetime.now().isoformat()
         print "starting verify at %s" % (start_time)
         print "configuration: %s" % (status_context)
@@ -667,6 +668,8 @@ def verify(head, config, is_master=False, clean=False):
                 sha_in_file_matches = n_sha and (n_sha == sha)
                 if (info_is_current and sha_in_file_matches) or not info_is_current:
                     set_build_status(status_context, 'failed')
+        if not dry_run:
+            maybe_upload_file("hubbot.html", "%s/hubbot.html" % work_id)
         if not dry_run and publish_images:
             subprocess.check_call([ "%s/vm-publish-images" % topdir ])
         if not is_master:
