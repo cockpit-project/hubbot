@@ -58,9 +58,6 @@ current_master_filename = os.path.join(work, "hubbot.current_master")
 # store when we pulled master info (sha)
 timestamp_master_fetched = None
 
-status_images_path = os.path.join(work, "status-images")
-status_images_url = os.path.join(work_url, "status-images")
-
 config = ast.literal_eval(open("%s/.hubbotrc" % os.environ['HOME']).read())
 
 github_token = config['github_token']
@@ -84,6 +81,9 @@ if 'publish_images' in config:
 
 if 'keep_work_dirs' in config:
     keep_work_dirs = config['keep_work_dirs']
+
+status_images_path = os.path.join(work, "status-images")
+status_images_url = os.path.join(work_url, "status-images")
 
 priority_default = 0
 priority_needs_attention = -1
