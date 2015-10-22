@@ -39,6 +39,7 @@ topdir = os.path.normpath(os.path.dirname(__file__))
 dry_run = False
 verbose = True
 tail_log = False
+publish_images = True
 
 new_style = False
 
@@ -78,6 +79,9 @@ if 'dry_run' in config:
 
 if 'remote' in config:
     is_remote = config['remote']
+
+if 'publish_images' in config:
+    publish_images = config['publish_images']
 
 if 'keep_work_dirs' in config:
     keep_work_dirs = config['keep_work_dirs']
@@ -663,7 +667,7 @@ def verify(head, config, is_master=False, clean=False):
                 sha_in_file_matches = n_sha and (n_sha == sha)
                 if (info_is_current and sha_in_file_matches) or not info_is_current:
                     set_build_status(status_context, 'failed')
-        if not dry_run:
+        if not dry_run and publish_images:
             subprocess.check_call([ "%s/vm-publish-images" % topdir ])
         if not is_master:
             load_persistent()
