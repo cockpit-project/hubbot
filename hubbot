@@ -343,6 +343,7 @@ def set_build_status(status_context, status):
             img_file = status_image_from_config(config, status)
             status_file = status_filename_from_config(config)
             cmd("ln", "-f", "-s", os.path.join("status-images", os.path.basename(img_file)), status_file)
+    sync_status()
 
 def trace(msg):
     if verbose:
@@ -960,6 +961,10 @@ def maybe_upload_file(src, dst):
         print "uploading", src, dst
         subprocess.check_call(config['upload_cmd'] % { 'src': src, 'dst': dst }, shell=True)
 
+def sync_status():
+    if 'sync_status_cmd' in config:
+        subprocess.check_call(config['sync_status_cmd'], shell=True)
+
 # Publish scan info in html format
 def publish_status(extended_info):
     load_persistent()
@@ -1022,7 +1027,7 @@ def publish_status(extended_info):
     # write finished html file
     with open("%sindex.html" % (work), "w") as out_file:
         out_file.write(header + master_details + tables + footer)
-    maybe_upload_file("%sindex.html" % (work), "index.html")
+    sync_status()
 
 def get_sorted_pulls():
     pulls = github_get("pulls")
