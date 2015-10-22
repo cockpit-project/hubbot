@@ -957,6 +957,10 @@ def print_master_details(extended_info):
     </div><!-- /.container -->
 """
 
+def maybe_upload_file(src, dst):
+    if 'upload_cmd' in config:
+        subprocess.check_call(config['upload_cmd'] % { 'src': src, 'dst': dst }, shell=True)
+
 # Publish scan info in html format
 def publish_status(extended_info):
     load_persistent()
@@ -1019,6 +1023,7 @@ def publish_status(extended_info):
     # write finished html file
     with open("%sindex.html" % (work), "w") as out_file:
         out_file.write(header + master_details + tables + footer)
+    maybe_upload_file("%sindex.html" % (work), "index.html")
 
 def get_sorted_pulls():
     pulls = github_get("pulls")
