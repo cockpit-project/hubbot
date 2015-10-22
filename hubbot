@@ -38,7 +38,6 @@ topdir = os.path.normpath(os.path.dirname(__file__))
 
 dry_run = False
 verbose = True
-tail_log = False
 publish_images = True
 
 new_style = False
@@ -374,10 +373,6 @@ class WorkDir(object):
             self.oldcwd = os.getcwd()
             os.chdir(self.path)
             self.log = subprocess.Popen("'%s/hublog2html' >hubbot.html" % topdir, stdin=subprocess.PIPE, shell=True, bufsize=0)
-            if tail_log:
-                self.tail = subprocess.Popen([ "tail", "-f", "hubbot.log" ])
-            else:
-                self.tail = None
             self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
             self.old_stdout.flush(); self.old_stderr.flush()
             sys.stdout = self.log.stdin
@@ -390,9 +385,6 @@ class WorkDir(object):
             sys.stderr = self.old_stderr
             self.log.stdin.close()
             self.log.wait()
-            if self.tail:
-                self.tail.kill()
-                self.tail.wait()
         trace("Leaving %s" % self.path)
 
 def list_work_dirs():
