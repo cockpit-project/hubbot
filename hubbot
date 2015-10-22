@@ -381,7 +381,10 @@ class WorkDir(object):
         if not dry_run:
             self.oldcwd = os.getcwd()
             os.chdir(self.path)
-            self.log = subprocess.Popen("'%s/hublog2html' >hubbot.html" % topdir, stdin=subprocess.PIPE, shell=True, bufsize=0)
+            logger = "'%s/hublog2html' >hubbot.html" % topdir
+            if 'logger_cmd' in config:
+                logger = config['logger_cmd']
+            self.log = subprocess.Popen(logger, stdin=subprocess.PIPE, shell=True, bufsize=0)
             self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
             self.old_stdout.flush(); self.old_stderr.flush()
             sys.stdout = self.log.stdin
@@ -687,7 +690,7 @@ def verify(head, config, is_master=False, clean=False):
                 if (job_start_time + datetime.timedelta(hours=2)) <= datetime.datetime.now():
                     running_jobs.remove(entry)
         store_persistent()
-    sync_verify("%s/%s/hubbot.html" % (work, work_id))
+    sync_verify("%s/%s" % (work, work_id))
 
 def master_from_status(status):
     path = "%s/%s/hubbot.master" % (work, os.path.basename(os.path.dirname(status['target_url'])))
