@@ -108,3 +108,7 @@ for f in *-checksum; do
       maybe_unpublish "$f"
     fi
 done
+
+if [ -x ./SNYC ]; then
+    ./SYNC
+fi
