@@ -82,6 +82,10 @@ if 'publish_images' in config:
 if 'keep_work_dirs' in config:
     keep_work_dirs = config['keep_work_dirs']
 
+publish_dest = "fedorapeople.org"
+if 'publish_dest' in config:
+    publish_dest = config['publish_dest']
+
 status_images_path = os.path.join(work, "status-images")
 status_images_url = os.path.join(work_url, "status-images")
 
@@ -1300,6 +1304,26 @@ def verify_pull(pull):
         trace("Verifying %s%s" % (data['head']['label'], " (cleanly)" if clean else ""))
         verify(data['head'], config, False, clean)
 
+# Let Cockpit itself do most of the work
+def verify_cockpit(test_os, test_arch):
+    work_id = "%s-%s-%s" % (test_os, test_arch, time.strftime("%s", time.gmtime()))
+    with WorkDir(work_id) as wd:
+        start_time = datetime.datetime.now().isoformat()
+        print "starting verify at %s" % (start_time)
+        print "os: %s" % (test_os)
+        print "arch: %s" % (test_arch)
+        print
+        os.putenv("TEST_OS", test_os)
+        os.putenv("TEST_ARCH", test_arch)
+        os.putenv("TEST_DATA", test_data)
+        os.putenv("TEST_JOBS", "4")
+        git("init")
+        git("remote", "add", "origin", "https://github.com/%s.git" % master_repo)
+        git("pull", "origin", "master")
+        cmd("timeout", "120m", "./VERIFY", "--github", "next", "--publish=%s" % publish_dest)
+        if publish_images:
+            subprocess.check_call([ "%s/vm-publish-images" % topdir ])
+
 def generate_status_images():
     status_color_combos = { 'passed': 'brightgreen',
                             'failed': 'red',
@@ -1335,6 +1359,7 @@ if "HUBBOT_NEW_STYLE" in os.environ and os.environ["HUBBOT_NEW_STYLE"]:
 
 def print_usage():
     print "Usage: hubbot verify [ [REPO] PULL ]"
+    print "       hubbot verify-cockpit OS ARCH"
     print "       hubbot scan [REPO]"
 
 if dry_run:
@@ -1359,6 +1384,9 @@ elif sys.argv[1] == 'verify' and len(sys.argv) <= 4:
     if not "/" in master_repo:
         master_repo = master_repo + "/cockpit"
     verify_pull(pull)
+
+elif sys.argv[1] == 'verify-cockpit' and len(sys.argv) == 4:
+    verify_cockpit(sys.argv[2], sys.argv[3])
 
 elif sys.argv[1] == 'scan' and len(sys.argv) <= 3:
     if len(sys.argv) == 3:
