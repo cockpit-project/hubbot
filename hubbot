@@ -578,6 +578,7 @@ def verify(head, config, is_master=False, clean=False):
                     }
         running_jobs.append(run_entry)
         store_persistent()
+        sync_verify("%s/%s" % (work, work_id))
         try:
             set_github_status(master_repo, sha, { "state": "pending" if not new_style else "success",
                                                   "description": status_message_running,
