@@ -109,6 +109,7 @@ for f in *-checksum; do
     fi
 done
 
-if [ -x ./SNYC ]; then
+cd "$TEST_DATA"
+if [ -x ./SYNC ]; then
     ./SYNC
 fi
