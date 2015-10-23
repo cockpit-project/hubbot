@@ -21,7 +21,7 @@
 
 SELF=vm-publish-images
 
-targetdir=/srv/testdata/images
+targetdir=/var/www/html/testdata/images
 
 TEST_DATA=${TEST_DATA:-$PWD}
 
