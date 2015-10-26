@@ -1324,6 +1324,15 @@ def verify_cockpit(test_os, test_arch):
         if publish_images:
             subprocess.check_call([ "%s/vm-publish-images" % topdir ])
 
+def scan_cockpit(test_os, test_arch):
+    with WorkDir("scan-cockpit") as wd:
+        os.putenv("TEST_OS", test_os)
+        os.putenv("TEST_ARCH", test_arch)
+        git("init")
+        git("remote", "add", "origin", "https://github.com/%s.git" % master_repo)
+        git("pull", "origin", "master")
+        cmd("timeout", "10m", "./VERIFY", "--github", "scan")
+
 def generate_status_images():
     status_color_combos = { 'passed': 'brightgreen',
                             'failed': 'red',
@@ -1361,6 +1370,7 @@ def print_usage():
     print "Usage: hubbot verify [ [REPO] PULL ]"
     print "       hubbot verify-cockpit OS ARCH"
     print "       hubbot scan [REPO]"
+    print "       hubbot scan-cockpit OS ARCH"
 
 if dry_run:
     print "hubbot dry run"
@@ -1395,6 +1405,9 @@ elif sys.argv[1] == 'scan' and len(sys.argv) <= 3:
     if not "/" in master_repo:
         master_repo = master_repo + "/cockpit"
     scan_pulls()
+
+elif sys.argv[1] == 'scan-cockpit' and len(sys.argv) == 4:
+    scan_cockpit(sys.argv[2], sys.argv[3])
 
 else:
     print_usage()
