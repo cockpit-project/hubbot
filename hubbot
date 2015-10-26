@@ -1317,21 +1317,27 @@ def verify_cockpit(test_os, test_arch):
         os.putenv("TEST_ARCH", test_arch)
         os.putenv("TEST_DATA", test_data)
         os.putenv("TEST_JOBS", "4")
-        git("init")
-        git("remote", "add", "origin", "https://github.com/%s.git" % master_repo)
-        git("pull", "origin", "master")
-        cmd("timeout", "120m", "./VERIFY", "--github", "next", "--publish=%s" % publish_dest)
-        if publish_images:
-            subprocess.check_call([ "%s/vm-publish-images" % topdir ])
+        try:
+            git("init")
+            git("remote", "add", "origin", "https://github.com/%s.git" % master_repo)
+            git("pull", "origin", "master")
+            cmd("timeout", "120m", "./VERIFY", "--github", "next", "--publish=%s" % publish_dest)
+            if publish_images:
+                subprocess.check_call([ "%s/vm-publish-images" % topdir ])
+        except:
+            traceback.print_exc()
 
 def scan_cockpit(test_os, test_arch):
     with WorkDir("scan-cockpit") as wd:
         os.putenv("TEST_OS", test_os)
         os.putenv("TEST_ARCH", test_arch)
-        git("init")
-        git("remote", "add", "origin", "https://github.com/%s.git" % master_repo)
-        git("pull", "origin", "master")
-        cmd("timeout", "10m", "./VERIFY", "--github", "scan")
+        try:
+            git("init")
+            git("remote", "add", "origin", "https://github.com/%s.git" % master_repo)
+            git("pull", "origin", "master")
+            cmd("timeout", "10m", "./VERIFY", "--github", "scan")
+        except:
+            traceback.print_exc()
 
 def generate_status_images():
     status_color_combos = { 'passed': 'brightgreen',
