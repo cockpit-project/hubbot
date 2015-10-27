@@ -1321,6 +1321,7 @@ def verify_cockpit(test_os, test_arch):
             git("init")
             git("remote", "add", "origin", "https://github.com/%s.git" % master_repo)
             git("pull", "origin", "master")
+            cmd("bash", "-c", "python ./test/testinfra.py | ssh cockpit@fedorapeople.org 'cat - >public_html/hubbot.txt'")
             cmd("timeout", "120m", "./VERIFY", "--github", "next", "--publish=%s" % publish_dest)
             if publish_images:
                 subprocess.check_call([ "%s/vm-publish-images" % topdir ])
